@@ -29,87 +29,39 @@ struct ChatView: View {
         store.threads[chat.threadId] ?? ThreadState()
     }
 
-    private var messages: [Message] { thread.messages }
+    private var messages: [Message] { thread.messages.filter { !$0.isDigest } }
 
     private var busy: Bool {
         if let bot { return bot.busy }
         return false
     }
 
-    private var subtitle: String {
-        if let bot {
-            let model = currentModelName(bot)
-            return model.isEmpty ? bot.subtitle : "\(bot.subtitle) · \(model)"
-        }
-        return group?.subtitle ?? ""
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Rectangle().fill(Theme.hairline).frame(height: 1)
             transcript
             composer
         }
         .background(Theme.windowBackground)
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if let bot {
+                    modelMenu(bot)
+                    tasksMenu(bot)
+                }
+                if busy {
+                    IconAction(systemName: "stop.circle.fill", help: "停止本轮", tint: .secondary) {
+                        store.interrupt()
+                    }
+                }
+                moreMenu
+            }
+        }
         .sheet(item: $preview) { attachment in
             AttachmentPreview(attachment: attachment)
         }
     }
 
-    // MARK: - Header
-
-    private var header: some View {
-        HStack(spacing: 11) {
-            if let bot {
-                AvatarView(name: bot.name, color: bot.color, url: bot.avatarUrl, size: 34)
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Theme.botColor("teal").opacity(0.14))
-                        .frame(width: 34, height: 34)
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.botColor("teal"))
-                }
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(chat.title)
-                        .font(.system(size: 14.5, weight: .semibold))
-                        .lineLimit(1)
-                    if busy { BusySpinner() }
-                }
-                Text(subtitle)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-
-            if let bot {
-                modelMenu(bot)
-                tasksMenu(bot)
-            }
-            if busy {
-                IconAction(systemName: "stop.circle.fill", help: "停止本轮", tint: .secondary) {
-                    store.interrupt()
-                }
-            }
-            moreMenu
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
-    }
-
-    private func currentModelName(_ bot: Bot) -> String {
-        guard let selection = bot.modelSelection else { return "" }
-        let instance = store.instances.first { $0.instanceId == selection.instanceId }
-        let model = instance?.models.first { $0.id == selection.model }?.label ?? selection.model
-        guard let instance, store.instances.count > 1 else { return model }
-        return "\(instance.name) · \(model)"
-    }
+    // MARK: - Toolbar
 
     private func modelMenu(_ bot: Bot) -> some View {
         Menu {
@@ -266,16 +218,12 @@ struct ChatView: View {
                             emptyConversation
                         }
                     } else {
-                        ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
-                            MessageRow(
-                                message: message,
-                                threadId: chat.threadId,
-                                showTime: showsTime(at: index),
-                                isRoom: group != nil,
-                                onPreview: { preview = $0 }
-                            )
-                            .id(message.id)
-                        }
+                        TranscriptMessages(
+                            messages: messages,
+                            threadId: chat.threadId,
+                            isRoom: group != nil,
+                            onPreview: { preview = $0 }
+                        )
                     }
 
                     Color.clear.frame(height: 1).id(bottomID)
@@ -317,11 +265,6 @@ struct ChatView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 80)
-    }
-
-    private func showsTime(at index: Int) -> Bool {
-        guard index > 0 else { return true }
-        return messages[index].createdAt.timeIntervalSince(messages[index - 1].createdAt) > 300
     }
 
     // MARK: - Composer

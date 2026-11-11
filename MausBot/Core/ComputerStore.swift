@@ -15,6 +15,12 @@ struct SavedComputer: Codable, Identifiable, Equatable {
     var lastUsedAt: Date
     var pairedAt: Date
     var e2e: E2EDescriptor? = nil
+    var localName: String? = nil
+
+    var displayName: String {
+        guard let localName, !localName.isEmpty else { return serverName }
+        return localName
+    }
 
     var activeEndpoint: CompanionEndpoint? {
         routes.first { $0.url == activeURL }
@@ -176,28 +182,45 @@ final class ComputerStore {
         }
     }
 
-    private func save() {
+    private func save() throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(computers) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        let data = try encoder.encode(computers)
+        try data.write(to: fileURL, options: .atomic)
     }
 
-    func upsert(_ computer: SavedComputer) {
+    @discardableResult
+    func upsert(_ computer: SavedComputer) -> SavedComputer {
+        var computer = computer
         if let index = computers.firstIndex(where: { $0.id == computer.id }) {
+            computer.localName = computers[index].localName
             computers[index] = computer
         } else {
             computers.append(computer)
         }
-        save()
+        try? save()
+        return computer
+    }
+
+    func rename(_ id: String, localName: String) throws {
+        guard let index = computers.firstIndex(where: { $0.id == id }) else { return }
+        let previous = computers[index]
+        let name = localName.trimmingCharacters(in: .whitespacesAndNewlines)
+        computers[index].localName = name.isEmpty ? nil : name
+        do {
+            try save()
+        } catch {
+            computers[index] = previous
+            throw error
+        }
     }
 
     func remove(_ id: String) {
         computers.removeAll { $0.id == id }
         Keychain.removeToken(for: id)
         if selectedId == id { selectedId = computers.first?.id }
-        save()
+        try? save()
     }
 
     func token(for id: String) -> String? {

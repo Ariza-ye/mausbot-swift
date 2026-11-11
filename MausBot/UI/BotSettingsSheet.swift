@@ -20,7 +20,7 @@ struct BotSettingsSheet: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(bot?.name ?? "Bot")
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    Text("运行在 \(store.computer?.serverName ?? "远程电脑")")
+                    Text("运行在 \(store.computer?.displayName ?? "远程电脑")")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }

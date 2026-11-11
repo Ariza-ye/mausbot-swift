@@ -81,6 +81,24 @@ enum SelfCheck {
                   CompanionEndpoint.automaticCandidates([hosted, local]).map(\.url) == [hosted.url])
             check("hosted routes need https", CompanionEndpoint.make(url: "http://phone.example.com", kind: .hosted, priority: 0) == nil)
 
+            check("chief role survives a renamed bot", Bot(json: ["id": "chief", "name": "协调员", "chiefOfStaff": true])?.chiefOfStaff == true)
+            check("ordinary bot named Chief is not a chief", Bot(json: ["id": "worker", "name": "Chief"])?.chiefOfStaff == false)
+
+            let imageClient = ApiClient(baseURL: "https://computer.example.com", token: nil)
+            let imageURL = "https://computer.example.com/api/attachments/qr-code.png"
+            check("remote filesystem images use the attachment route",
+                  (try? imageClient.bytesURL("/home/maus/.openmausbot/attachments/qr-code.png"))?.absoluteString == imageURL)
+            check("bare image filenames use the attachment route",
+                  (try? imageClient.bytesURL("qr-code.png"))?.absoluteString == imageURL)
+            check("attachment API paths stay unchanged",
+                  (try? imageClient.bytesURL("/api/attachments/qr-code.png"))?.absoluteString == imageURL)
+            check("same-origin image URLs stay unchanged",
+                  (try? imageClient.bytesURL(imageURL))?.absoluteString == imageURL)
+            check("message file routes keep their query",
+                  (try? imageClient.bytesURL("/api/threads/t/messages/m/image?size=full"))?.query == "size=full")
+            check("foreign image origins are refused",
+                  (try? imageClient.bytesURL("https://other.example.com/api/attachments/qr-code.png")) == nil)
+
             let cardJSON: JSON = [
                 "title": "Run the tests?",
                 "options": ["Allow", "Deny"],
@@ -118,6 +136,67 @@ enum SelfCheck {
             } ?? false
             let code = inline?.runs.contains { run in run.inlinePresentationIntent?.contains(.code) == true } ?? false
             check("inline markdown keeps bold and code", emphasized && code)
+
+            let activityDate = Date(timeIntervalSince1970: 1_700_000_000)
+            let activity = Message(id: "tool-1", role: "bot", kind: "activity", text: "", createdAt: activityDate,
+                                   tool: ToolRow(json: ["name": "Bash", "ok": true]), turnId: "turn-1", fromName: "Bot A")
+            var nextActivity = activity
+            nextActivity.id = "tool-2"
+            let grouped = TranscriptEntry.group([activity, nextActivity])
+            check("consecutive tools collapse into one stable group", grouped.count == 1 && grouped.first?.id == activity.id && grouped.first?.messages.count == 2)
+            let reply = Message(id: "reply", role: "bot", text: "Done", createdAt: activityDate)
+            check("replies separate activity groups", TranscriptEntry.group([activity, reply, nextActivity]).count == 3)
+            var approval = activity
+            approval.id = "approval"
+            approval.card = card
+            check("approval cards stay outside activity groups", !TranscriptEntry.isActivity(approval) && TranscriptEntry.group([activity, approval, nextActivity]).count == 3)
+            nextActivity.turnId = "turn-2"
+            check("activity groups respect turn boundaries", TranscriptEntry.group([activity, nextActivity]).count == 2)
+            nextActivity.turnId = activity.turnId
+            nextActivity.fromName = "Bot B"
+            check("activity groups respect room senders", TranscriptEntry.group([activity, nextActivity]).count == 2)
+            nextActivity.fromName = activity.fromName
+            nextActivity.createdAt = activityDate.addingTimeInterval(301)
+            let separated = TranscriptEntry.group([activity, nextActivity])
+            check("activity groups preserve time separators", separated.count == 2 && separated.last?.showTime == true)
+            check("empty transcripts produce no groups", TranscriptEntry.group([]).isEmpty)
+
+            var digest = Message(id: "digest", role: "bot", text: " \n[digest] · no tool activity observed in this turn · reply: hello", createdAt: activityDate)
+            check("bot digest summaries are hidden", digest.isDigest)
+            digest.role = "user"
+            check("user text mentioning digest stays visible", !digest.isDigest)
+            digest.role = "bot"
+            digest.text = "This reply explains [digest]."
+            check("normal replies mentioning digest stay visible", !digest.isDigest)
+            digest.kind = "digest"
+            check("explicit digest message kinds are hidden", digest.isDigest)
+            digest.card = card
+            check("digest filtering preserves interactive cards", !digest.isDigest)
+
+            do {
+                let storage = ComputerStore.shared
+                let fixture = SavedComputer(
+                    id: "selfcheck-name-\(UUID().uuidString)", serverName: "Remote computer",
+                    routes: [local], activeURL: local.url, hosts: [local.host],
+                    allowedKinds: [.lan], allowedLocalURLs: [local.url], lastUsedAt: Date(), pairedAt: Date()
+                )
+                storage.upsert(fixture)
+                defer { storage.remove(fixture.id) }
+                try storage.rename(fixture.id, localName: "  工作电脑  ")
+                let renamed = storage.computers.first { $0.id == fixture.id }!
+                check("computer remark changes only the local name", renamed.displayName == "工作电脑" && renamed.serverName == fixture.serverName && renamed.routes == fixture.routes)
+                let decoded = try JSONDecoder().decode(SavedComputer.self, from: JSONEncoder().encode(renamed))
+                check("computer remark survives coding", decoded.localName == "工作电脑")
+                let refreshed = storage.upsert(fixture.applying(ConnectionMetadata(serverName: "Updated remote", endpoints: [local])))
+                check("stale connection updates preserve the local remark", refreshed.displayName == "工作电脑" && refreshed.serverName == "Updated remote")
+                try storage.rename(fixture.id, localName: " \n ")
+                let cleared = storage.upsert(renamed)
+                check("clearing a remark restores the remote name without stale resurrection", cleared.localName == nil && cleared.displayName == fixture.serverName)
+                let legacy = try JSONDecoder().decode(SavedComputer.self, from: JSONEncoder().encode(fixture))
+                check("old computer records work without a remark", legacy.localName == nil && legacy.displayName == fixture.serverName)
+            } catch {
+                check("computer remark persistence", false)
+            }
 
             let store = AppStore.shared
             store.handle([

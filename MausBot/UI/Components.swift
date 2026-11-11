@@ -1,11 +1,60 @@
 import AppKit
 import SwiftUI
 
+struct SidebarResizeHandle: NSViewRepresentable {
+    let minWidth: CGFloat
+    let maxWidth: CGFloat
+
+    func makeNSView(context: Context) -> SidebarResizeHandleView {
+        SidebarResizeHandleView(minWidth: minWidth, maxWidth: maxWidth)
+    }
+
+    func updateNSView(_ nsView: SidebarResizeHandleView, context: Context) {}
+}
+
+final class SidebarResizeHandleView: NSView {
+    private let minWidth: CGFloat
+    private let maxWidth: CGFloat
+
+    init(minWidth: CGFloat, maxWidth: CGFloat) {
+        self.minWidth = minWidth
+        self.maxWidth = maxWidth
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .resizeLeftRight)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        var ancestor = superview
+        while let view = ancestor {
+            if let split = view as? NSSplitView, split.isVertical, split.subviews.count > 1,
+               let window {
+                let startX = split.convert(event.locationInWindow, from: nil).x
+                let startWidth = split.subviews[0].frame.width
+                while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+                    if next.type == .leftMouseUp { break }
+                    let delta = split.convert(next.locationInWindow, from: nil).x - startX
+                    let width = min(maxWidth, max(minWidth, startWidth + delta))
+                    split.setPosition(width, ofDividerAt: 0)
+                }
+                return
+            }
+            ancestor = view.superview
+        }
+        super.mouseDown(with: event)
+    }
+}
+
 struct RemoteImage: View {
     let path: String
     var contentMode: ContentMode = .fill
     @EnvironmentObject private var store: AppStore
     @State private var image: NSImage?
+    @State private var loadError: String?
 
     var body: some View {
         Group {
@@ -13,15 +62,42 @@ struct RemoteImage: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
+            } else if let loadError {
+                Button {
+                    Task { await load() }
+                } label: {
+                    Image(systemName: "arrow.clockwise.circle")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.primary.opacity(0.06))
+                }
+                .buttonStyle(.plain)
+                .help("图片加载失败：\(loadError)。点击重试")
             } else {
                 Rectangle().fill(Color.primary.opacity(0.06))
             }
         }
         .task(id: path) {
-            guard image == nil else { return }
-            if let data = await store.imageData(path: path) {
-                image = NSImage(data: data)
+            await load()
+        }
+    }
+
+    @MainActor
+    private func load() async {
+        image = nil
+        loadError = nil
+        do {
+            let data = try await store.imageData(path: path)
+            try Task.checkCancellation()
+            guard let decoded = NSImage(data: data) else {
+                loadError = "无法识别图片格式"
+                return
             }
+            image = decoded
+        } catch is CancellationError {
+            return
+        } catch {
+            loadError = error.localizedDescription
         }
     }
 }

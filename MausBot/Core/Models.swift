@@ -78,6 +78,7 @@ struct Bot: Identifiable, Equatable, Sendable {
     var modelSelection: ModelSelection?
     var notifications: Bool
     var section: String?
+    var chiefOfStaff: Bool
     var speakReplies: Bool
 
     var activeTask: BotTask? {
@@ -117,6 +118,7 @@ struct Bot: Identifiable, Equatable, Sendable {
         modelSelection = ModelSelection(json: json.obj("modelSelection"))
         notifications = json.bool("notifications", true)
         section = json.nonEmpty("section")
+        chiefOfStaff = json.bool("chiefOfStaff")
         speakReplies = json.bool("speakReplies")
     }
 }
@@ -292,6 +294,10 @@ struct Message: Identifiable, Equatable, Sendable {
 
     var isUser: Bool { role == "user" }
     var isBot: Bool { role == "bot" }
+    var isDigest: Bool {
+        isBot && card == nil && tool == nil && attachments.isEmpty
+            && (kind == "digest" || text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[digest]"))
+    }
 
     init(
         id: String,

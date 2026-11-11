@@ -34,6 +34,15 @@ enum Render {
             case "settings":
                 content = AnyView(SettingsView().environmentObject(store))
                 size = CGSize(width: 580, height: 460)
+            case "computer-edit":
+                let route = CompanionEndpoint.direct(host: "192.168.1.8", port: 8787, priority: 0)!
+                let saved = SavedComputer(
+                    id: "render-computer", serverName: "ariza's computer", routes: [route], activeURL: route.url,
+                    hosts: [route.host], allowedKinds: [.lan], allowedLocalURLs: [route.url],
+                    lastUsedAt: Date(), pairedAt: Date(), localName: "工作电脑"
+                )
+                content = AnyView(ComputerEditSheet(computer: saved).environmentObject(store))
+                size = CGSize(width: 520, height: 540)
             case "bot-settings":
                 guard store.computer != nil, let bot = await botToShow(store) else { fail("no computer") }
                 store.settingsBotId = bot.id
@@ -67,6 +76,8 @@ enum Render {
                     Message(id: "u1", role: "user", text: "帮我检查一下构建，然后总结失败原因。", createdAt: now.addingTimeInterval(-600)),
                     Message(id: "b1", role: "bot", text: "先看错误。**两个编译错误**都在 `AppStore.swift`：\n\n1. `NSApp` 在无窗口进程里是 nil\n2. SSE 空行被异步序列吞掉\n\n```swift\nguard NSApp?.isActive == true else { return }\n```\n\n> 修复后再跑一次自检。\n\n| 检查 | 结果 |\n| --- | --- |\n| protocol | PASS |\n| app | PASS |", createdAt: now.addingTimeInterval(-540)),
                     Message(id: "t1", role: "bot", kind: "activity", text: "", createdAt: now.addingTimeInterval(-480), tool: ToolRow(json: ["name": "Bash", "label": "swift build", "ok": true, "detail": "Build complete in 12.4s"])!),
+                    Message(id: "t2", role: "bot", kind: "activity", text: "", createdAt: now.addingTimeInterval(-470), tool: ToolRow(json: ["name": "Bash", "label": "git diff --check", "ok": true, "detail": "No whitespace errors"])!),
+                    Message(id: "t3", role: "bot", kind: "activity", text: "", createdAt: now.addingTimeInterval(-460), tool: ToolRow(json: ["name": "Read", "label": "读取构建日志", "ok": true, "detail": "构建通过。"])!),
                     Message(id: "c1", role: "bot", kind: "options", text: "", createdAt: now.addingTimeInterval(-420), card: Card(json: [
                         "title": "运行 rm -rf build？",
                         "subtitle": "这个操作会删除构建目录，之后的构建会更慢。",
@@ -86,9 +97,7 @@ enum Render {
                 ]
                 content = AnyView(
                     VStack(alignment: .leading, spacing: 12) {
-                        ForEach(Array(samples.enumerated()), id: \.element.id) { index, message in
-                            MessageRow(message: message, threadId: "thread-main", showTime: index == 0)
-                        }
+                        TranscriptMessages(messages: samples, threadId: "thread-main")
                         Spacer(minLength: 0)
                     }
                     .padding(24)
@@ -101,7 +110,11 @@ enum Render {
             }
 
             let url = folder.appendingPathComponent("\(screen).png")
-            save(content, size: size, to: url)
+            if screen == "computer-edit" {
+                saveHosted(content, size: size, to: url)
+            } else {
+                save(content, size: size, to: url)
+            }
             print(url.path)
             exit(0)
         }
@@ -125,6 +138,23 @@ enum Render {
     private static func fail(_ message: String) -> Never {
         print(message)
         exit(2)
+    }
+
+    private static func saveHosted(_ view: AnyView, size: CGSize, to url: URL) {
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        let host = NSHostingView(rootView: view)
+        window.contentView = host
+        host.frame = NSRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+        host.display()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { fail("could not create bitmap") }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { fail("could not encode bitmap") }
+        do {
+            try png.write(to: url)
+        } catch {
+            fail(error.localizedDescription)
+        }
     }
 
     private static func save(_ view: AnyView, size: CGSize, to url: URL) {

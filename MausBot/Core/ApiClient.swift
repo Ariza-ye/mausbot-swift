@@ -143,15 +143,26 @@ struct ApiClient {
 
     /// Raw bytes for an attachment or avatar. Both sit behind the device token,
     /// so they are read through this client, never a bare URL.
-    func bytes(_ path: String, method: String = "GET", body: JSON? = nil) async throws -> Data {
-        let full = path.hasPrefix("http://") || path.hasPrefix("https://")
-            ? path
-            : path.hasPrefix("/") ? baseURL + path : baseURL + "/api/attachments/" + path
-        guard let url = URL(string: full) else { throw APIError(status: 0, message: "附件地址无效", body: nil) }
+    func bytesURL(_ path: String) throws -> URL {
+        let url: URL?
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            url = URL(string: path)
+        } else if path.hasPrefix("/api/") {
+            url = URL(string: baseURL + path)
+        } else {
+            let filename = URL(fileURLWithPath: path).lastPathComponent
+            url = URL(string: baseURL + "/api/attachments/")?.appendingPathComponent(filename)
+        }
+        guard let url else { throw APIError(status: 0, message: "附件地址无效", body: nil) }
         guard let origin = URL(string: baseURL),
               url.scheme == origin.scheme, url.host == origin.host, url.port == origin.port else {
             throw APIError(status: 0, message: "附件必须来自已配对的电脑。", body: nil)
         }
+        return url
+    }
+
+    func bytes(_ path: String, method: String = "GET", body: JSON? = nil) async throws -> Data {
+        let url = try bytesURL(path)
         var request = URLRequest(url: url)
         request.httpMethod = method
         if let body {

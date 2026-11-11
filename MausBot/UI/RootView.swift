@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
@@ -58,6 +59,10 @@ struct MainView: View {
         NavigationSplitView {
             SidebarView(search: $search)
                 .navigationSplitViewColumnWidth(min: 248, ideal: 282, max: 360)
+                .overlay(alignment: .trailing) {
+                    SidebarResizeHandle(minWidth: 248, maxWidth: 360)
+                        .frame(width: 12)
+                }
         } detail: {
             VStack(spacing: 0) {
                 noticeBar
@@ -143,10 +148,112 @@ struct MainView: View {
     }
 }
 
+struct ComputerEditSheet: View {
+    let computer: SavedComputer
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var localName: String
+    @State private var saveError: String?
+
+    init(computer: SavedComputer) {
+        self.computer = computer
+        _localName = State(initialValue: computer.localName ?? "")
+    }
+
+    private var saved: SavedComputer {
+        store.computers.first { $0.id == computer.id } ?? computer
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("编辑电脑").font(.system(size: 16, weight: .semibold))
+                Spacer()
+            }
+            .padding(20)
+
+            Form {
+                Section {
+                    TextField("本机备注", text: $localName, prompt: Text(saved.serverName))
+                    LabeledContent("远程名称", value: saved.serverName)
+                        .textSelection(.enabled)
+                } header: {
+                    Text("电脑名称")
+                } footer: {
+                    Text("备注仅在此 App 中显示，不会修改远程 OpenMausBot 的名称或配置。留空后使用远程名称。")
+                }
+
+                Section("已保存的连接方式") {
+                    LabeledContent("通信方式", value: saved.e2e == nil ? "HTTP / HTTPS" : "端到端加密")
+                    ForEach(saved.routes) { route in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(routeName(route.kind))
+                                Spacer()
+                                if route.url == saved.activeURL {
+                                    Text("上次使用")
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Text(route.url)
+                                .font(.system(size: 11.5, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if let e2e = saved.e2e, e2e.routes != "local", let relays = e2e.r, !relays.isEmpty {
+                        LabeledContent("中继服务") {
+                            Text(relays.joined(separator: "\n"))
+                                .font(.system(size: 11.5, design: .monospaced))
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            if let saveError {
+                Text(saveError)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 20)
+            }
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("保存") {
+                    do {
+                        try store.renameComputer(computer.id, localName: localName)
+                        dismiss()
+                    } catch {
+                        saveError = "保存失败：\(error.localizedDescription)"
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(20)
+        }
+        .frame(width: 520, height: 540)
+    }
+
+    private func routeName(_ kind: EndpointKind) -> String {
+        switch kind {
+        case .lan: return "局域网直连"
+        case .tailnet: return "Tailscale 直连"
+        case .bonjour: return "Bonjour 本地发现"
+        case .hosted: return "公网地址"
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showPairing = false
     @State private var forgetId: String?
+    @State private var editingComputer: SavedComputer?
 
     var body: some View {
         TabView {
@@ -161,6 +268,9 @@ struct SettingsView: View {
         .sheet(isPresented: $showPairing) {
             PairingView(onboarding: false)
                 .frame(width: 520, height: 540)
+        }
+        .sheet(item: $editingComputer) { saved in
+            ComputerEditSheet(computer: saved)
         }
         .confirmationDialog(
             "忘记这台电脑？",
@@ -192,7 +302,7 @@ struct SettingsView: View {
                 HStack {
                     ConnectionPill(state: store.connection)
                     Spacer()
-                    Text(store.connection.detail.isEmpty ? (store.computer?.serverName ?? "") : store.connection.detail)
+                    Text(store.connection.detail.isEmpty ? (store.computer?.displayName ?? "") : store.connection.detail)
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -253,7 +363,7 @@ struct SettingsView: View {
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(saved.serverName)
+                    Text(saved.displayName)
                         .font(.system(size: 13, weight: .medium))
                     if active {
                         Text("当前")
@@ -276,6 +386,8 @@ struct SettingsView: View {
                 Button("连接") { store.select(saved.id) }
                     .controlSize(.small)
             }
+            Button("编辑") { editingComputer = saved }
+                .controlSize(.small)
             Button("忘记") { forgetId = saved.id }
                 .controlSize(.small)
         }

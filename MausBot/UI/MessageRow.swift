@@ -11,6 +11,9 @@ struct MessageRow: View {
     @EnvironmentObject private var store: AppStore
 
     private var isUser: Bool { message.isUser }
+    private var hasBubble: Bool {
+        isUser || (message.isBot && message.tool == nil && message.card == nil)
+    }
 
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
@@ -62,21 +65,21 @@ struct MessageRow: View {
                             .foregroundStyle(.red)
                     }
                 }
-                .padding(.horizontal, isUser ? 12 : 0)
-                .padding(.vertical, isUser ? 8 : 0)
+                .padding(.horizontal, hasBubble ? 12 : 0)
+                .padding(.vertical, hasBubble ? 8 : 0)
                 .background(
                     Group {
-                        if isUser {
+                        if hasBubble {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Theme.accent.opacity(0.11))
+                                .fill(isUser ? Theme.accent.opacity(0.11) : Theme.subtleFill)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(Theme.accent.opacity(0.18), lineWidth: 1)
+                                        .stroke(isUser ? Theme.accent.opacity(0.18) : Theme.hairline, lineWidth: 1)
                                 )
                         }
                     }
                 )
-                .frame(maxWidth: isUser ? 560 : 620, alignment: .leading)
+                .frame(maxWidth: isUser ? 560 : 620, alignment: isUser ? .trailing : .leading)
 
                 if !isUser { Spacer(minLength: 40) }
             }
@@ -98,7 +101,7 @@ struct MessageRow: View {
                 Text(detail)
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(.tertiary)
-                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 9)
@@ -116,7 +119,7 @@ struct MessageRow: View {
             if !images.isEmpty {
                 HStack(spacing: 8) {
                     ForEach(images) { attachment in
-                        RemoteImage(path: attachment.path)
+                        RemoteImage(path: attachment.path, contentMode: .fit)
                             .frame(width: 180, height: 130)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .overlay(
@@ -154,6 +157,118 @@ struct MessageRow: View {
                 .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.05)))
             }
         }
+    }
+}
+
+struct TranscriptEntry: Identifiable {
+    var messages: [Message]
+    let showTime: Bool
+    var id: String { messages[0].id }
+
+    static func group(_ messages: [Message]) -> [TranscriptEntry] {
+        var entries: [TranscriptEntry] = []
+        for (index, message) in messages.enumerated() {
+            let showTime = index == 0 || message.createdAt.timeIntervalSince(messages[index - 1].createdAt) > 300
+            if isActivity(message), !showTime,
+               let previous = entries.last?.messages.last,
+               isActivity(previous), previous.turnId == message.turnId,
+               previous.fromName == message.fromName, previous.fromColor == message.fromColor {
+                entries[entries.count - 1].messages.append(message)
+            } else {
+                entries.append(TranscriptEntry(messages: [message], showTime: showTime))
+            }
+        }
+        return entries
+    }
+
+    static func isActivity(_ message: Message) -> Bool {
+        !message.isUser && message.tool != nil && message.card == nil && message.attachments.isEmpty
+    }
+}
+
+struct TranscriptMessages: View {
+    let messages: [Message]
+    let threadId: String
+    var isRoom = false
+    var onPreview: (Attachment) -> Void = { _ in }
+
+    var body: some View {
+        ForEach(TranscriptEntry.group(messages)) { entry in
+            if TranscriptEntry.isActivity(entry.messages[0]) {
+                ToolActivityGroup(messages: entry.messages, threadId: threadId, showTime: entry.showTime, isRoom: isRoom)
+            } else {
+                MessageRow(message: entry.messages[0], threadId: threadId, showTime: entry.showTime, isRoom: isRoom, onPreview: onPreview)
+            }
+        }
+    }
+}
+
+private struct ToolActivityGroup: View {
+    let messages: [Message]
+    let threadId: String
+    let showTime: Bool
+    let isRoom: Bool
+    @State private var expanded = false
+
+    private var summary: String {
+        var names: [String] = []
+        var counts: [String: Int] = [:]
+        for message in messages {
+            guard let tool = message.tool else { continue }
+            let name = tool.name.isEmpty ? (tool.label ?? "工具") : tool.name
+            if counts[name] == nil { names.append(name) }
+            counts[name, default: 0] += 1
+        }
+        return names.map { "\($0) ×\(counts[$0, default: 0])" }.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if showTime, let first = messages.first {
+                Text(first.createdAt, format: .dateTime.hour().minute())
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity)
+            }
+            if isRoom, let from = messages.first?.fromName {
+                Text(from)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.botColor(messages.first?.fromColor ?? "green"))
+            }
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "square.3.layers.3d")
+                    Text("活动").fontWeight(.medium)
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(summary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    let failures = messages.filter { $0.tool?.ok == false }.count
+                    if failures > 0 {
+                        Text("\(failures) 项失败").foregroundStyle(.orange)
+                    }
+                }
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("活动，\(messages.count) 次工具调用")
+            .accessibilityValue(expanded ? "已展开" : "已收起")
+
+            if expanded {
+                ForEach(messages) { message in
+                    MessageRow(message: message, threadId: threadId)
+                }
+            }
+        }
+        .frame(maxWidth: 620, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -141,7 +141,7 @@ final class AppStore: ObservableObject {
                 guard store.setToken(result.token, for: saved.id) else {
                     throw APIError(status: 500, message: "设备令牌无法保存到钥匙串，配对尚未完成。", body: nil)
                 }
-                store.upsert(saved)
+                saved = store.upsert(saved)
                 store.selectedId = saved.id
                 computers = store.computers
                 pairing = .idle
@@ -192,6 +192,14 @@ final class AppStore: ObservableObject {
         computers = store.computers
         if computer?.id == id {
             computer = computers.first { $0.id == store.selectedId } ?? computers.first
+        }
+    }
+
+    func renameComputer(_ id: String, localName: String) throws {
+        try store.rename(id, localName: localName)
+        computers = store.computers
+        if computer?.id == id {
+            computer?.localName = computers.first { $0.id == id }?.localName
         }
     }
 
@@ -409,7 +417,7 @@ final class AppStore: ObservableObject {
 
     private func persist(_ next: SavedComputer) -> SavedComputer {
         guard next != computer else { return next }
-        store.upsert(next)
+        let next = store.upsert(next)
         computers = store.computers
         computer = next
         return next
@@ -780,7 +788,7 @@ extension AppStore {
     }
 
     private func notifyIfNeeded(_ message: Message, threadId: String) {
-        guard notificationBanners, message.isBot, message.kind == "text" else { return }
+        guard notificationBanners, message.isBot, message.kind == "text", !message.isDigest else { return }
         if open?.threadId == threadId, NSApp?.isActive == true { return }
         guard let bot = bots.first(where: { $0.threadId == threadId || $0.tasks.contains { $0.threadId == threadId } }) else { return }
         guard bot.notifications else { return }
@@ -1036,9 +1044,10 @@ extension AppStore {
         return Attachment(kind: "image", path: path, mime: mime, name: url.lastPathComponent)
     }
 
-    func imageData(path: String) async -> Data? {
+    func imageData(path: String) async throws -> Data {
         if let cached = ImageCache.shared.value(for: path) { return cached }
-        guard let client, let data = try? await client.bytes(path) else { return nil }
+        guard let client else { throw APIError(status: 0, message: "尚未连接电脑", body: nil) }
+        let data = try await client.bytes(path)
         ImageCache.shared.store(data, for: path)
         return data
     }

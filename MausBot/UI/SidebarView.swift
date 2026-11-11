@@ -9,6 +9,7 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             computerHeader
             searchField
+            chiefCards
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
                     if isSearching {
@@ -35,7 +36,7 @@ struct SidebarView: View {
     private var computerHeader: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(store.computer?.serverName ?? "MausBot")
+                Text(store.computer?.displayName ?? "MausBot")
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
                 ConnectionPill(state: store.connection)
@@ -47,9 +48,9 @@ struct SidebarView: View {
                         store.select(saved.id)
                     } label: {
                         if saved.id == store.computer?.id {
-                            Label(saved.serverName, systemImage: "checkmark")
+                            Label(saved.displayName, systemImage: "checkmark")
                         } else {
-                            Text(saved.serverName)
+                            Text(saved.displayName)
                         }
                     }
                 }
@@ -106,7 +107,69 @@ struct SidebarView: View {
     // MARK: - Lists
 
     private var visibleBots: [Bot] {
-        store.bots.filter { !$0.hidden }
+        store.bots.filter { !$0.hidden && !$0.chiefOfStaff }
+    }
+
+    private var chiefs: [Bot] {
+        store.bots.filter { !$0.hidden && $0.chiefOfStaff }
+    }
+
+    @ViewBuilder
+    private var chiefCards: some View {
+        if !chiefs.isEmpty {
+            LazyVGrid(
+                columns: [chiefs.count == 1 ? GridItem(.fixed(96)) : GridItem(.adaptive(minimum: 96))],
+                alignment: .center,
+                spacing: 8
+            ) {
+                ForEach(chiefs) { bot in
+                    Button {
+                        search = ""
+                        store.open(bot: bot)
+                    } label: {
+                        HoverRow(selected: store.open?.target == .bot(bot.id)) {
+                            VStack(spacing: 4) {
+                                AvatarView(name: bot.name, color: bot.color, url: bot.avatarUrl, size: 34)
+                                    .overlay(alignment: .bottomTrailing) {
+                                        Image(systemName: "star.fill")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.orange)
+                                            .padding(2)
+                                            .background(Circle().fill(Theme.sidebarBackground))
+                                    }
+                                HStack(spacing: 5) {
+                                    Text(bot.name)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .lineLimit(1)
+                                    if bot.busy {
+                                        BusySpinner()
+                                    } else if bot.unread {
+                                        UnreadDot()
+                                    }
+                                }
+                                Text(bot.title.isEmpty ? "管理员" : bot.title)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.05)))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("设置…") { store.settingsBotId = bot.id }
+                        Button(bot.notifications ? "关闭通知" : "开启通知") {
+                            store.patchBot(botId: bot.id, fields: ["notifications": !bot.notifications])
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+        }
     }
 
     @ViewBuilder
@@ -125,7 +188,7 @@ struct SidebarView: View {
                 }
             }
         }
-        if visibleBots.isEmpty {
+        if visibleBots.isEmpty && chiefs.isEmpty {
             emptyNote("还没有 Bot")
         }
     }
@@ -293,23 +356,6 @@ struct SidebarView: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
-            Button {
-                store.showNewBotSheet = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .semibold))
-                    Text("新建 Bot")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundStyle(Theme.accent)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(Theme.accent.opacity(0.10)))
-            }
-            .buttonStyle(.plain)
-            .disabled(store.connection.phase != .online)
-
             Spacer()
 
             Button {
