@@ -1,0 +1,16 @@
+OpenMausBot third-party resources
+
+Copyright 2026 Milind Soni and OpenMausBot contributors.
+Licensed under the Apache License, Version 2.0.
+The accompanying OpenMausBot-LICENSE.txt contains the license text.
+
+Source: https://github.com/milind-soni/OpenMausBot
+E2E reference revision: 6f226f15def56c697626f2ed6dffac416510c79a
+
+Reused resources:
+- Assets.xcassets/AppIcon.appiconset: official build/icon.iconset images.
+- e2e-vectors.json: companion/src/e2e/vectors/v1.json, unmodified.
+
+The Swift E2E implementation is implemented against the official wire spec.
+tools/e2e-companion-test.mjs loads official code from an external checkout;
+that Node server code is used for tests and is not bundled in the app.
