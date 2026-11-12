@@ -37,8 +37,8 @@ struct ChatView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            transcript
+        transcript
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             composer
         }
         .background(Theme.windowBackground)
@@ -273,66 +273,67 @@ struct ChatView: View {
 
     private var composer: some View {
         VStack(spacing: 0) {
-            Rectangle().fill(Theme.hairline).frame(height: 1)
             VStack(alignment: .leading, spacing: 8) {
                 if let attachment {
                     attachmentChip(attachment)
                 }
-                HStack(alignment: .bottom, spacing: 8) {
-                    IconAction(systemName: "paperclip", help: group == nil ? "附加图片" : "房间里只发送文字", tint: Color.secondary.opacity(group == nil ? 1 : 0.4)) {
-                        guard group == nil else { return }
+                HStack(alignment: .bottom, spacing: 12) {
+                    Button {
                         showImporter = true
+                    } label: {
+                        Image(systemName: "paperclip")
+                            .font(.system(size: 17, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, height: 36)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .disabled(group != nil || uploading)
+                    .opacity(group == nil && !uploading ? 1 : 0.4)
+                    .help(group == nil ? "附加图片" : "房间里只发送文字")
+                    .accessibilityLabel("附加图片")
 
-                    ZStack(alignment: .topLeading) {
-                        if draft.isEmpty {
-                            Text(group == nil ? "发消息给 \(chat.title)" : "发消息到房间")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.tertiary)
-                                .padding(.top, 7)
-                                .padding(.leading, 4)
-                                .allowsHitTesting(false)
-                        }
-                        TextEditor(text: $draft)
-                            .font(.system(size: 13))
-                            .scrollContentBackground(.hidden)
-                            .frame(height: editorHeight)
-                            .focused($composerFocused)
-                    }
+                    TextField(
+                        "",
+                        text: $draft,
+                        axis: .vertical
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14))
+                    .lineLimit(1...6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                    .focused($composerFocused)
+                    .accessibilityLabel("消息输入框")
 
                     if uploading {
-                        ProgressView().controlSize(.small)
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 28, height: 36)
                     }
 
                     Button(action: send) {
                         Image(systemName: "arrow.up")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 28, height: 28)
-                            .background(Circle().fill(canSend ? Theme.accent : Color.primary.opacity(0.15)))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(canSend ? Color.white : Color.secondary.opacity(0.5))
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(canSend ? Theme.accent : Color.primary.opacity(0.06)))
+                            .frame(height: 36)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
                     .keyboardShortcut(.return, modifiers: .command)
                     .help("发送（⌘↩）")
+                    .accessibilityLabel("发送消息")
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Theme.cardBackground)
-                    .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Theme.hairline, lineWidth: 1)
-            )
+            .modifier(ComposerSurface())
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
         }
-        .background(.bar)
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.image], allowsMultipleSelection: false) { result in
             guard case .success(let urls) = result, let url = urls.first else { return }
             uploading = true
@@ -351,11 +352,6 @@ struct ChatView: View {
             send()
             return .handled
         }
-    }
-
-    private var editorHeight: CGFloat {
-        let lines = max(1, draft.components(separatedBy: "\n").count)
-        return min(132, CGFloat(lines) * 17 + 18)
     }
 
     private var canSend: Bool {
@@ -391,6 +387,20 @@ struct ChatView: View {
         draft = ""
         attachment = nil
         atBottom = true
+    }
+}
+
+private struct ComposerSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background(.regularMaterial, in: shape)
+                .overlay(shape.stroke(Theme.hairline, lineWidth: 1))
+                .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+        }
     }
 }
 
