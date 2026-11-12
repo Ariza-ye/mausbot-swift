@@ -57,6 +57,10 @@ xcrun notarytool submit dist/MausBot-0.1.1.dmg --keychain-profile <profile> --wa
 xcrun stapler staple dist/MausBot-0.1.1.dmg
 ```
 
+推送与应用版本一致的标签（例如 `v0.1.1`）后，GitHub Actions 会构建通用架构
+DMG 并创建 GitHub Release。也可以在 Actions 中手动运行“发布 macOS DMG”，
+输入已有标签。自动发布的包使用 ad-hoc 签名，未经过 Apple 公证。
+
 ## 配对
 
 配对码只能由**远程电脑**上的 OpenMausBot 生成（桌面端 → 设置 → 远程访问）。

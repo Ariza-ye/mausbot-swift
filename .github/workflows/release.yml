@@ -1,0 +1,45 @@
+name: 发布 macOS DMG
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的已有版本标签，例如 v0.1.1'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: 检出版本标签
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+
+      - name: 构建 DMG
+        run: |
+          mkdir -p build-release
+          if ! ./scripts/package-dmg.sh; then
+            tail -n 100 build-release/package-build.log || true
+            exit 1
+          fi
+
+      - name: 校验版本并发布
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build-release/Build/Products/Release/MausBot.app/Contents/Info.plist)
+          if [[ "$RELEASE_TAG" != "v$version" ]]; then
+            echo "标签 $RELEASE_TAG 与应用版本 $version 不一致"
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" "dist/MausBot-$version.dmg" \
+            --verify-tag --generate-notes --title "$RELEASE_TAG"
