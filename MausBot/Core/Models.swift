@@ -364,6 +364,12 @@ struct InstanceModel: Identifiable, Equatable, Sendable {
     var id: String
     var label: String
     var provider: String?
+    var variants: [ModelVariant]
+}
+
+struct ModelVariant: Identifiable, Equatable, Sendable {
+    var id: String
+    var label: String
 }
 
 struct ProviderInstance: Identifiable, Equatable, Sendable {
@@ -372,6 +378,8 @@ struct ProviderInstance: Identifiable, Equatable, Sendable {
     var driverKind: String
     var enabled: Bool
     var models: [InstanceModel]
+    var effortLevels: [String]
+    var modelVariants: Bool
 
     var id: String { instanceId }
     var name: String { displayName.isEmpty ? instanceId : displayName }
@@ -382,10 +390,17 @@ struct ProviderInstance: Identifiable, Equatable, Sendable {
         displayName = json.nonEmpty("displayName") ?? instanceId
         driverKind = json.str("driverKind") ?? ""
         enabled = json.bool("enabled", true)
+        let capabilities = json.obj("capabilities")
+        effortLevels = capabilities?.strArray("effortLevels") ?? []
+        modelVariants = capabilities?.bool("modelVariants") ?? false
         let catalog = json.obj("models")
         models = (catalog?.objArray("options") ?? []).compactMap { option in
             guard let id = option.nonEmpty("id") else { return nil }
-            return InstanceModel(id: id, label: option.nonEmpty("label") ?? id, provider: option.nonEmpty("provider"))
+            let variants = option.objArray("variants").compactMap { variant -> ModelVariant? in
+                guard let id = variant.nonEmpty("id") else { return nil }
+                return ModelVariant(id: id, label: variant.nonEmpty("label") ?? id)
+            }
+            return InstanceModel(id: id, label: option.nonEmpty("label") ?? id, provider: option.nonEmpty("provider"), variants: variants)
         }
     }
 }

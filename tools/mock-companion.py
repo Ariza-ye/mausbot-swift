@@ -71,6 +71,7 @@ state = {
     },
     "counter": 100,
     "model": {"instanceId": "claude", "model": "claude-sonnet-4-5"},
+    "thread_model": None,
     "card": {
         "title": "运行 rm -rf build？",
         "subtitle": "这个操作会删除构架目录。",
@@ -121,7 +122,8 @@ def bot_payload(port):
         "threadId": "thread-main",
         "mainThreadId": "thread-main",
         "tasks": [
-            {"threadId": "thread-main", "title": "主线", "unread": False, "busy": False, "pinned": True},
+            {"threadId": "thread-main", "title": "主线", "unread": False, "busy": False, "pinned": True,
+             "modelSelection": dict(state["thread_model"] or state["model"])},
         ],
         "unread": False,
         "pinned": True,
@@ -207,6 +209,7 @@ class Handler(BaseHTTPRequestHandler):
                 "driverKind": "claude",
                 "displayName": "Claude",
                 "enabled": True,
+                "capabilities": {"effortLevels": ["low", "medium", "high", "max"]},
                 "models": {"default": "claude-sonnet-4-5", "options": [
                     {"id": "claude-sonnet-4-5", "label": "Sonnet 4.5"},
                     {"id": "claude-opus-4-1", "label": "Opus 4.1"},
@@ -318,15 +321,29 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authed():
             return self.denied()
         body = self.read_json()
+        if path == "/api/bots/bot-1/tasks/thread-main":
+            selection = body.get("modelSelection")
+            if not isinstance(selection, dict) or not selection.get("instanceId") or not selection.get("model"):
+                return self.send_json(400, {"error": "modelSelection required"})
+            if selection["model"] == "reject-model":
+                return self.send_json(409, {"error": "this thread is busy"})
+            with state_lock:
+                state["thread_model"] = selection
+            return self.send_json(200, {"bot": bot_payload(self.server.server_port)})
         if path.endswith("/model"):
-            selection = body.get("modelSelection") if isinstance(body.get("modelSelection"), dict) else body
+            selection = body
+            if set(selection) - {"instanceId", "model", "effort", "variant"}:
+                return self.send_json(400, {"error": "unsupported model field"})
             if selection.get("instanceId") and selection.get("model"):
                 with state_lock:
-                    state["model"] = {"instanceId": selection["instanceId"], "model": selection["model"]}
+                    state["model"] = dict(selection)
             print("[mock] model", state["model"], flush=True)
             return self.send_json(200, {"bot": bot_payload(self.server.server_port)})
         if path.startswith("/api/bots/"):
             print("[mock] patch", body, flush=True)
+            if isinstance(body.get("modelSelection"), dict):
+                with state_lock:
+                    state["model"] = dict(body["modelSelection"])
             bot = bot_payload(self.server.server_port)
             bot.update({k: v for k, v in body.items() if k in ("name", "pinned", "hidden", "notifications")})
             return self.send_json(200, {"bot": bot})

@@ -24,7 +24,7 @@ struct MarkdownText: View {
                 .fixedSize(horizontal: false, vertical: true)
         case .heading(let level, let content):
             Text(inline(content))
-                .font(.system(size: level <= 2 ? 17 : 15, weight: .semibold))
+                .appFont(size: level <= 2 ? 17 : 15, weight: .semibold)
                 .padding(.top, 2)
         case .bullet(let content):
             HStack(alignment: .firstTextBaseline, spacing: 7) {
@@ -80,7 +80,7 @@ struct MarkdownText: View {
                     GridRow {
                         ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
                             Text(inline(cell))
-                                .font(.system(size: 12, weight: index == 0 ? .semibold : .regular))
+                                .appFont(size: 12, weight: index == 0 ? .semibold : .regular)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: 240, alignment: .leading)
                         }

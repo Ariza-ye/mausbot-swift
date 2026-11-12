@@ -12,6 +12,13 @@ enum AppAppearance: String, CaseIterable, Identifiable {
         case .dark: return "深色"
         }
     }
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
     var colorScheme: ColorScheme? {
         switch self {
         case .system: return nil
@@ -65,7 +72,10 @@ final class AppStore: ObservableObject {
         didSet { UserDefaults.standard.set(notificationBanners, forKey: Keys.notifications) }
     }
     @Published var appearance: AppAppearance {
-        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: Keys.appearance) }
+        didSet {
+            UserDefaults.standard.set(appearance.rawValue, forKey: Keys.appearance)
+            NSApp?.appearance = appearance.nsAppearance
+        }
     }
 
     private enum Keys {
@@ -984,32 +994,23 @@ extension AppStore {
         }
     }
 
-    func setModel(botId: String, selection: ModelSelection) {
+    func setModel(botId: String, threadId: String? = nil, selection: ModelSelection) {
         guard let client else { return }
         Task { [weak self] in
-            let path = "/api/bots/\(botId)/model"
-            // Current harness builds take the selection flat; earlier ones wrap
-            // it as {modelSelection} and some accept it as POST.
-            let forms: [(String, JSON)] = [
-                ("PATCH", selection.json),
-                ("PATCH", ["modelSelection": selection.json]),
-                ("POST", ["modelSelection": selection.json]),
-            ]
-            var lastError: APIError?
-            for (method, body) in forms {
-                do {
-                    _ = try await client.request(method, path, body: body)
+            do {
+                let path = threadId.map { "/api/bots/\(botId)/tasks/\($0)" } ?? "/api/bots/\(botId)/model"
+                let body: JSON = threadId == nil ? selection.json : ["modelSelection": selection.json]
+                let answer = try await client.patch(path, body: body)
+                if let json = answer.obj("bot"), let bot = Bot(json: json) {
+                    self?.upsert(bot)
+                } else {
                     try? await self?.refreshAll()
-                    return
-                } catch let error as APIError {
-                    lastError = error
-                    if error.isUnauthorized { break }
-                } catch {
-                    self?.lastError = error.localizedDescription
-                    return
                 }
+            } catch let error as APIError {
+                self?.lastError = error.message
+            } catch {
+                self?.lastError = error.localizedDescription
             }
-            if let lastError { self?.lastError = lastError.message }
         }
     }
 

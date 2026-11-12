@@ -117,7 +117,7 @@ enum Render {
             }
 
             let url = folder.appendingPathComponent("\(screen).png")
-            if screen == "computer-edit" || screen == "emoji-picker" {
+            if screen == "computer-edit" || screen == "emoji-picker" || screen == "settings" {
                 saveHosted(content, size: size, to: url)
             } else {
                 save(content, size: size, to: url)

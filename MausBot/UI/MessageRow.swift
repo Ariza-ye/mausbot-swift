@@ -6,6 +6,8 @@ struct MessageRow: View {
     let threadId: String
     var showTime = false
     var isRoom = false
+    var bot: Bot?
+    var showAvatarColumn = true
     var onPreview: (Attachment) -> Void = { _ in }
 
     @EnvironmentObject private var store: AppStore
@@ -14,12 +16,18 @@ struct MessageRow: View {
     private var hasBubble: Bool {
         isUser || (message.isBot && message.tool == nil && message.card == nil)
     }
+    private var senderBot: Bot? {
+        if !isRoom { return bot }
+        guard let name = message.fromName else { return nil }
+        let matches = store.bots.filter { $0.name == name }
+        return matches.count == 1 ? matches.first : nil
+    }
 
     var body: some View {
         VStack(alignment: isUser ? .trailing : .leading, spacing: 3) {
             if showTime {
                 Text(message.createdAt, format: .dateTime.hour().minute())
-                    .font(.system(size: 10))
+                    .appFont(size: 10)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.bottom, 2)
@@ -27,11 +35,24 @@ struct MessageRow: View {
 
             HStack(alignment: .top, spacing: 8) {
                 if isUser { Spacer(minLength: 60) }
+                if !isUser && showAvatarColumn {
+                    if message.isBot && hasBubble {
+                        AvatarView(
+                            name: senderBot?.name ?? message.fromName ?? "Bot",
+                            color: senderBot?.color ?? message.fromColor ?? "green",
+                            url: senderBot?.avatarUrl,
+                            size: 30,
+                            emoji: senderBot.flatMap { store.emoji(for: $0.id) }
+                        )
+                    } else {
+                        Color.clear.frame(width: 30, height: 1)
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 6) {
                     if isRoom, !isUser, let from = message.fromName {
                         Text(from)
-                            .font(.system(size: 11, weight: .semibold))
+                            .appFont(size: 11, weight: .semibold)
                             .foregroundStyle(Theme.botColor(message.fromColor ?? "green"))
                     }
 
@@ -42,12 +63,12 @@ struct MessageRow: View {
                     } else if !message.text.isEmpty {
                         if isUser {
                             Text(message.text)
-                                .font(.system(size: 13.5))
+                                .appFont(size: 13.5)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
                         } else {
                             MarkdownText(text: message.text)
-                                .font(.system(size: 13.5))
+                                .appFont(size: 13.5)
                         }
                     }
 
@@ -57,11 +78,11 @@ struct MessageRow: View {
 
                     if message.pending {
                         Label("发送中…", systemImage: "clock")
-                            .font(.system(size: 10.5))
+                            .appFont(size: 10.5)
                             .foregroundStyle(.tertiary)
                     } else if message.failed {
                         Label("发送失败", systemImage: "exclamationmark.circle")
-                            .font(.system(size: 10.5))
+                            .appFont(size: 10.5)
                             .foregroundStyle(.red)
                     }
                 }
@@ -91,9 +112,9 @@ struct MessageRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Image(systemName: tool.ok ? "wrench.and.screwdriver" : "exclamationmark.triangle")
-                    .font(.system(size: 10, weight: .medium))
+                    .appFont(size: 10, weight: .medium)
                 Text(tool.label ?? tool.name)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .appFont(size: 11.5, weight: .medium)
                     .lineLimit(2)
             }
             .foregroundStyle(tool.ok ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
@@ -151,7 +172,7 @@ struct MessageRow: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 11.5))
+                .appFont(size: 11.5)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.05)))
@@ -190,6 +211,7 @@ struct TranscriptMessages: View {
     let messages: [Message]
     let threadId: String
     var isRoom = false
+    var bot: Bot?
     var onPreview: (Attachment) -> Void = { _ in }
 
     var body: some View {
@@ -197,7 +219,7 @@ struct TranscriptMessages: View {
             if TranscriptEntry.isActivity(entry.messages[0]) {
                 ToolActivityGroup(messages: entry.messages, threadId: threadId, showTime: entry.showTime, isRoom: isRoom)
             } else {
-                MessageRow(message: entry.messages[0], threadId: threadId, showTime: entry.showTime, isRoom: isRoom, onPreview: onPreview)
+                MessageRow(message: entry.messages[0], threadId: threadId, showTime: entry.showTime, isRoom: isRoom, bot: bot, onPreview: onPreview)
             }
         }
     }
@@ -226,13 +248,13 @@ private struct ToolActivityGroup: View {
         VStack(alignment: .leading, spacing: 8) {
             if showTime, let first = messages.first {
                 Text(first.createdAt, format: .dateTime.hour().minute())
-                    .font(.system(size: 10))
+                    .appFont(size: 10)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
             }
             if isRoom, let from = messages.first?.fromName {
                 Text(from)
-                    .font(.system(size: 11, weight: .semibold))
+                    .appFont(size: 11, weight: .semibold)
                     .foregroundStyle(Theme.botColor(messages.first?.fromColor ?? "green"))
             }
             Button {
@@ -242,7 +264,7 @@ private struct ToolActivityGroup: View {
                     Image(systemName: "square.3.layers.3d")
                     Text("活动").fontWeight(.medium)
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .appFont(size: 9, weight: .semibold)
                     Text(summary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -251,7 +273,7 @@ private struct ToolActivityGroup: View {
                         Text("\(failures) 项失败").foregroundStyle(.orange)
                     }
                 }
-                .font(.system(size: 11.5))
+                .appFont(size: 11.5)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -263,11 +285,12 @@ private struct ToolActivityGroup: View {
 
             if expanded {
                 ForEach(messages) { message in
-                    MessageRow(message: message, threadId: threadId)
+                    MessageRow(message: message, threadId: threadId, showAvatarColumn: false)
                 }
             }
         }
         .frame(maxWidth: 620, alignment: .leading)
+        .padding(.leading, 38)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -282,15 +305,15 @@ struct CardView: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 7) {
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
+                    .appFont(size: 11, weight: .semibold)
                     .foregroundStyle(card.isApproval ? .orange : Theme.accent)
                 Text(card.title)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .appFont(size: 12.5, weight: .semibold)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !card.subtitle.isEmpty {
                 Text(card.subtitle)
-                    .font(.system(size: 12))
+                    .appFont(size: 12)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -301,7 +324,7 @@ struct CardView: View {
             }
             if let held = card.held, !held.isEmpty {
                 Text(held)
-                    .font(.system(size: 11))
+                    .appFont(size: 11)
                     .foregroundStyle(.orange)
             }
 
@@ -317,12 +340,12 @@ struct CardView: View {
                     HStack(spacing: 6) {
                         TextField("或直接输入回答", text: $freeText)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 12))
+                            .appFont(size: 12)
                             .padding(6)
                             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.05)))
                             .onSubmit(submitFreeText)
                         Button("发送", action: submitFreeText)
-                            .font(.system(size: 11.5, weight: .medium))
+                            .appFont(size: 11.5, weight: .medium)
                             .disabled(freeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
@@ -331,7 +354,7 @@ struct CardView: View {
                         store.alwaysAllow(threadId: threadId, card: card)
                     } label: {
                         Label("始终允许", systemImage: "checkmark.shield")
-                            .font(.system(size: 11))
+                            .appFont(size: 11)
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
@@ -339,9 +362,9 @@ struct CardView: View {
             } else {
                 HStack(spacing: 5) {
                     Image(systemName: settledIcon)
-                        .font(.system(size: 10))
+                        .appFont(size: 10)
                     Text(settledText)
-                        .font(.system(size: 11))
+                        .appFont(size: 11)
                 }
                 .foregroundStyle(.secondary)
             }
@@ -391,7 +414,7 @@ struct CardView: View {
             store.respond(threadId: threadId, card: card, answer: option)
         } label: {
             Text(option)
-                .font(.system(size: 11.5, weight: .medium))
+                .appFont(size: 11.5, weight: .medium)
                 .lineLimit(2)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 5)

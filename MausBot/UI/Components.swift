@@ -141,7 +141,7 @@ struct AvatarView: View {
                     .clipShape(Circle())
             } else {
                 Text(initial)
-                    .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
+                    .appFont(size: size * 0.42, weight: .semibold, design: .rounded)
                     .foregroundStyle(.white)
             }
         }
@@ -181,7 +181,7 @@ struct ConnectionPill: View {
                 .frame(width: 7, height: 7)
                 .shadow(color: tone.opacity(0.7), radius: 3)
             Text(label)
-                .font(.system(size: 11, weight: .medium))
+                .appFont(size: 11, weight: .medium)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 9)
@@ -200,13 +200,13 @@ struct ErrorBanner: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
             Text(message)
-                .font(.system(size: 12.5))
+                .appFont(size: 12.5)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .appFont(size: 10, weight: .bold)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
@@ -224,7 +224,11 @@ struct ErrorBanner: View {
         )
         .padding(.horizontal, 24)
         .task(id: message) {
-            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            do {
+                try await Task.sleep(nanoseconds: 8_000_000_000)
+            } catch {
+                return
+            }
             onDismiss()
         }
     }
@@ -235,7 +239,7 @@ struct SectionLabel: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10.5, weight: .semibold))
+            .appFont(size: 10.5, weight: .semibold)
             .tracking(0.6)
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 12)
@@ -293,7 +297,7 @@ struct IconAction: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 12.5, weight: .medium))
+                .appFont(size: 12.5, weight: .medium)
                 .foregroundStyle(tint)
                 .frame(width: 26, height: 26)
                 .background(

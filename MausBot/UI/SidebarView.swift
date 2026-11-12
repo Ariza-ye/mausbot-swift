@@ -37,7 +37,7 @@ struct SidebarView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(store.computer?.displayName ?? "MausBot")
-                    .font(.system(size: 14, weight: .semibold))
+                    .appFont(size: 14, weight: .semibold)
                     .lineLimit(1)
                 ConnectionPill(state: store.connection)
             }
@@ -61,7 +61,7 @@ struct SidebarView: View {
                 }
             } label: {
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
+                    .appFont(size: 10, weight: .semibold)
                     .foregroundStyle(.secondary)
                     .frame(width: 24, height: 24)
                     .background(Circle().fill(Color.primary.opacity(0.06)))
@@ -78,17 +78,17 @@ struct SidebarView: View {
     private var searchField: some View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 11, weight: .medium))
+                .appFont(size: 11, weight: .medium)
                 .foregroundStyle(.tertiary)
             TextField("搜索消息", text: $search)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
+                .appFont(size: 12.5)
             if !search.isEmpty {
                 Button {
                     search = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
+                        .appFont(size: 11)
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
@@ -132,14 +132,14 @@ struct SidebarView: View {
                                 AvatarView(name: bot.name, color: bot.color, url: bot.avatarUrl, size: 34, emoji: store.emoji(for: bot.id))
                                     .overlay(alignment: .bottomTrailing) {
                                         Image(systemName: "star.fill")
-                                            .font(.system(size: 10))
+                                            .appFont(size: 10)
                                             .foregroundStyle(.orange)
                                             .padding(2)
                                             .background(Circle().fill(Theme.sidebarBackground))
                                     }
                                 HStack(spacing: 5) {
                                     Text(bot.name)
-                                        .font(.system(size: 12, weight: .medium))
+                                        .appFont(size: 12, weight: .medium)
                                         .lineLimit(1)
                                     if bot.busy {
                                         BusySpinner()
@@ -148,7 +148,7 @@ struct SidebarView: View {
                                     }
                                 }
                                 Text(bot.title.isEmpty ? "管理员" : bot.title)
-                                    .font(.system(size: 10))
+                                    .appFont(size: 10)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                                     .padding(.horizontal, 6)
@@ -227,16 +227,16 @@ struct SidebarView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 4) {
                             Text(bot.name)
-                                .font(.system(size: 13, weight: .medium))
+                                .appFont(size: 13, weight: .medium)
                                 .lineLimit(1)
                             if bot.pinned {
                                 Image(systemName: "pin.fill")
-                                    .font(.system(size: 8))
+                                    .appFont(size: 8)
                                     .foregroundStyle(.tertiary)
                             }
                         }
                         Text(bot.subtitle)
-                            .font(.system(size: 11))
+                            .appFont(size: 11)
                             .foregroundStyle(bot.busy ? Theme.accent : .secondary)
                             .lineLimit(1)
                     }
@@ -283,15 +283,15 @@ struct SidebarView: View {
                             .fill(Theme.botColor("teal").opacity(0.16))
                             .frame(width: 30, height: 30)
                         Image(systemName: "person.2.fill")
-                            .font(.system(size: 12, weight: .medium))
+                            .appFont(size: 12, weight: .medium)
                             .foregroundStyle(Theme.botColor("teal"))
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(group.name)
-                            .font(.system(size: 13, weight: .medium))
+                            .appFont(size: 13, weight: .medium)
                             .lineLimit(1)
                         Text(group.subtitle)
-                            .font(.system(size: 11))
+                            .appFont(size: 11)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -309,7 +309,7 @@ struct SidebarView: View {
         if store.searching {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("正在搜索…").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text("正在搜索…").appFont(size: 12).foregroundStyle(.secondary)
             }
             .padding(12)
         } else if store.searchHits.isEmpty {
@@ -323,17 +323,17 @@ struct SidebarView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(spacing: 5) {
                                 Text(hit.name)
-                                    .font(.system(size: 12.5, weight: .medium))
+                                    .appFont(size: 12.5, weight: .medium)
                                     .lineLimit(1)
                                 if let task = hit.taskTitle, !task.isEmpty {
                                     Text("· \(task)")
-                                        .font(.system(size: 11))
+                                        .appFont(size: 11)
                                         .foregroundStyle(.tertiary)
                                         .lineLimit(1)
                                 }
                             }
                             Text(hit.text)
-                                .font(.system(size: 11.5))
+                                .appFont(size: 11.5)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }
@@ -346,7 +346,7 @@ struct SidebarView: View {
 
     private func emptyNote(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 12))
+            .appFont(size: 12)
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -362,7 +362,7 @@ struct SidebarView: View {
                 openSettings()
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 12, weight: .medium))
+                    .appFont(size: 12, weight: .medium)
                     .foregroundStyle(.secondary)
                     .frame(width: 26, height: 26)
             }

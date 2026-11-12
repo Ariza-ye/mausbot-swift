@@ -11,6 +11,8 @@ struct ChatView: View {
     @State private var showImporter = false
     @State private var preview: Attachment?
     @State private var atBottom = true
+    @State private var userScrolling = false
+    @State private var scrollRequest = 0
     @FocusState private var composerFocused: Bool
 
     private let bottomID = "conversation-bottom"
@@ -32,8 +34,8 @@ struct ChatView: View {
     private var messages: [Message] { thread.messages.filter { !$0.isDigest } }
 
     private var busy: Bool {
-        if let bot { return bot.busy }
-        return false
+        guard let bot else { return false }
+        return bot.busy || messages.contains { $0.role == "user" && $0.pending }
     }
 
     var body: some View {
@@ -49,11 +51,6 @@ struct ChatView: View {
                         .padding(.leading, 8)
                     tasksMenu(bot)
                 }
-                if busy {
-                    IconAction(systemName: "stop.circle.fill", help: "停止本轮", tint: .secondary) {
-                        store.interrupt()
-                    }
-                }
                 moreMenu
                     .padding(.trailing, 8)
             }
@@ -66,7 +63,8 @@ struct ChatView: View {
     // MARK: - Toolbar
 
     private func modelMenu(_ bot: Bot) -> some View {
-        Menu {
+        let selection = bot.task(threadId: chat.threadId)?.modelSelection ?? bot.modelSelection
+        return Menu {
             if store.instances.isEmpty {
                 Text("没有可用的模型")
             }
@@ -76,15 +74,16 @@ struct ChatView: View {
                         Button {
                             store.setModel(
                                 botId: bot.id,
+                                threadId: chat.threadId,
                                 selection: ModelSelection(
                                     instanceId: instance.instanceId,
                                     model: model.id,
-                                    effort: bot.modelSelection?.effort
+                                    effort: selection?.effort
                                 )
                             )
                         } label: {
-                            if bot.modelSelection?.instanceId == instance.instanceId,
-                               bot.modelSelection?.model == model.id {
+                            if selection?.instanceId == instance.instanceId,
+                               selection?.model == model.id {
                                 Label(model.label, systemImage: "checkmark")
                             } else {
                                 Text(model.label)
@@ -99,10 +98,9 @@ struct ChatView: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: "cpu")
-                    .font(.system(size: 10, weight: .medium))
-                Text(shortModelName(bot))
-                    .font(.system(size: 11.5, weight: .medium))
+                ProviderIcon(selection: selection, instances: store.instances)
+                Text(shortModelName(selection))
+                    .appFont(size: 11.5, weight: .medium)
                     .lineLimit(1)
             }
             .foregroundStyle(.secondary)
@@ -113,7 +111,7 @@ struct ChatView: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("切换这个 Bot 的模型")
+        .help("切换当前对话的模型")
     }
 
     private func tasksMenu(_ bot: Bot) -> some View {
@@ -135,7 +133,7 @@ struct ChatView: View {
             }
         } label: {
             Image(systemName: "bubble.left.and.text.bubble.right")
-                .font(.system(size: 12, weight: .medium))
+                .appFont(size: 12, weight: .medium)
                 .foregroundStyle(.secondary)
                 .frame(width: 26, height: 26)
         }
@@ -145,8 +143,8 @@ struct ChatView: View {
         .help("切换对话")
     }
 
-    private func shortModelName(_ bot: Bot) -> String {
-        guard let selection = bot.modelSelection else { return "模型" }
+    private func shortModelName(_ selection: ModelSelection?) -> String {
+        guard let selection else { return "模型" }
         let instance = store.instances.first { $0.instanceId == selection.instanceId }
         return instance?.models.first { $0.id == selection.model }?.label ?? selection.model
     }
@@ -176,7 +174,7 @@ struct ChatView: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .font(.system(size: 12, weight: .semibold))
+                .appFont(size: 12, weight: .semibold)
                 .foregroundStyle(.secondary)
                 .frame(width: 26, height: 26)
         }
@@ -199,7 +197,7 @@ struct ChatView: View {
                                 if thread.loading { ProgressView().controlSize(.mini) }
                                 Text("加载更早的消息")
                             }
-                            .font(.system(size: 11.5))
+                            .appFont(size: 11.5)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
@@ -224,6 +222,7 @@ struct ChatView: View {
                             messages: messages,
                             threadId: chat.threadId,
                             isRoom: group != nil,
+                            bot: bot,
                             onPreview: { preview = $0 }
                         )
                     }
@@ -239,15 +238,34 @@ struct ChatView: View {
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 96
             } action: { _, nearBottom in
-                atBottom = nearBottom
+                if userScrolling { atBottom = nearBottom }
             }
-            .onChange(of: messages.last?.id) { _, _ in
-                guard atBottom else { return }
-                withAnimation(.easeOut(duration: 0.16)) {
-                    proxy.scrollTo(bottomID, anchor: .bottom)
+            .onScrollPhaseChange { _, phase, context in
+                if phase == .idle {
+                    if userScrolling {
+                        let geometry = context.geometry
+                        atBottom = geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 96
+                    }
+                    userScrolling = false
+                } else if phase == .tracking || phase == .interacting || phase == .decelerating {
+                    userScrolling = true
                 }
             }
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentSize.height
+            } action: { _, _ in
+                guard atBottom, !userScrolling else { return }
+                proxy.scrollTo(bottomID, anchor: .bottom)
+            }
+            .onChange(of: messages.last?.id) { _, _ in
+                guard atBottom, !userScrolling else { return }
+                proxy.scrollTo(bottomID, anchor: .bottom)
+            }
+            .onChange(of: scrollRequest) { _, _ in
+                proxy.scrollTo(bottomID, anchor: .bottom)
+            }
             .onChange(of: chat.threadId) { _, _ in
+                atBottom = true
                 proxy.scrollTo(bottomID, anchor: .bottom)
             }
             .onAppear {
@@ -259,10 +277,10 @@ struct ChatView: View {
     private var emptyConversation: some View {
         VStack(spacing: 10) {
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 22, weight: .light))
+                .appFont(size: 22, weight: .light)
                 .foregroundStyle(.tertiary)
             Text(bot == nil ? "房间还没有消息" : "和 \(bot?.name ?? "Bot") 说点什么")
-                .font(.system(size: 12.5))
+                .appFont(size: 12.5)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -282,7 +300,7 @@ struct ChatView: View {
                         showImporter = true
                     } label: {
                         Image(systemName: "paperclip")
-                            .font(.system(size: 17, weight: .regular))
+                            .appFont(size: 17, weight: .regular)
                             .foregroundStyle(.secondary)
                             .frame(width: 32, height: 36)
                             .contentShape(Rectangle())
@@ -299,7 +317,7 @@ struct ChatView: View {
                         axis: .vertical
                     )
                     .textFieldStyle(.plain)
-                    .font(.system(size: 14))
+                    .appFont(size: 14)
                     .lineLimit(1...6)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
@@ -312,25 +330,59 @@ struct ChatView: View {
                             .frame(width: 28, height: 36)
                     }
 
-                    Button(action: send) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(canSend ? Color.white : Color.secondary.opacity(0.5))
-                            .frame(width: 32, height: 32)
-                            .background(Circle().fill(canSend ? Theme.accent : Color.primary.opacity(0.06)))
-                            .frame(height: 36)
-                            .contentShape(Rectangle())
+                    if busy {
+                        Button {
+                            store.interrupt()
+                        } label: {
+                            Image(systemName: "stop.fill")
+                                .appFont(size: 13, weight: .semibold)
+                                .foregroundStyle(.white)
+                                .frame(width: 32, height: 32)
+                                .background(Circle().fill(Theme.accent))
+                                .frame(height: 36)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("打断本轮回复")
+                        .accessibilityLabel("打断本轮回复")
+                    } else {
+                        Button(action: send) {
+                            Image(systemName: "arrow.up")
+                                .appFont(size: 14, weight: .semibold)
+                                .foregroundStyle(canSend ? Color.white : Color.secondary.opacity(0.5))
+                                .frame(width: 32, height: 32)
+                                .background(Circle().fill(canSend ? Theme.accent : Color.primary.opacity(0.06)))
+                                .frame(height: 36)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canSend)
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .help("发送（⌘↩）")
+                        .accessibilityLabel("发送消息")
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!canSend)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .help("发送（⌘↩）")
-                    .accessibilityLabel("发送消息")
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .modifier(ComposerSurface())
+            .overlay(alignment: .topLeading) {
+                if busy {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text(bot?.busy == true ? "正在想办法…" : "正在发送…")
+                            .appFont(size: 11.5, weight: .medium)
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
+                    .offset(x: 12, y: -32)
+                    .accessibilityElement(children: .combine)
+                }
+            }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
         }
@@ -348,6 +400,10 @@ struct ChatView: View {
         }
         .onKeyPress(phases: .down) { press in
             guard press.key == .return, composerFocused else { return .ignored }
+            if let input = NSApp.keyWindow?.firstResponder as? NSTextInputClient,
+               input.hasMarkedText() {
+                return .ignored
+            }
             if press.modifiers.contains(.shift) { return .ignored }
             send()
             return .handled
@@ -364,14 +420,14 @@ struct ChatView: View {
                 .frame(width: 30, height: 30)
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             Text(attachment.name ?? "图片")
-                .font(.system(size: 11.5))
+                .appFont(size: 11.5)
                 .lineLimit(1)
                 .foregroundStyle(.secondary)
             Button {
                 self.attachment = nil
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 11))
+                    .appFont(size: 11)
                     .foregroundStyle(.tertiary)
             }
             .buttonStyle(.plain)
@@ -381,12 +437,13 @@ struct ChatView: View {
     }
 
     private func send() {
-        guard canSend else { return }
+        guard canSend, !busy else { return }
         let attached = attachment.map { [$0] } ?? []
+        atBottom = true
         store.send(text: draft, attachments: attached)
         draft = ""
         attachment = nil
-        atBottom = true
+        scrollRequest += 1
     }
 }
 
@@ -412,7 +469,7 @@ struct AttachmentPreview: View {
         VStack(spacing: 0) {
             HStack {
                 Text(attachment.name ?? "图片")
-                    .font(.system(size: 13, weight: .medium))
+                    .appFont(size: 13, weight: .medium)
                 Spacer()
                 Button("关闭") { dismiss() }
                     .keyboardShortcut(.cancelAction)

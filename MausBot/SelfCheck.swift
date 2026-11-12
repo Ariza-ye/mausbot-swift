@@ -48,6 +48,19 @@ enum SelfCheck {
         }
 
         if command == "protocol" || command == "all" {
+            let iconInstance = ProviderInstance(json: ["instanceId": "custom", "driverKind": "claude", "models": ["options": [["id": "gpt-6.1-sol", "provider": "openai"]]]])!
+            let reasoningInstance = ProviderInstance(json: [
+                "instanceId": "reasoning",
+                "capabilities": ["effortLevels": ["low", "high"], "modelVariants": true],
+                "models": ["options": [["id": "model", "variants": [["id": "deep", "label": "Deep"]]]]],
+            ])!
+            check("model reasoning capabilities parse", reasoningInstance.effortLevels == ["low", "high"] && reasoningInstance.modelVariants && reasoningInstance.models.first?.variants.first?.label == "Deep")
+            let reasoningSelection = ModelSelection(instanceId: "reasoning", model: "model", effort: "high", variant: "deep")
+            check("model reasoning selection round trips", ModelSelection(json: reasoningSelection.json) == reasoningSelection)
+            check("model icon uses the model provider before the driver", ProviderIcon.iconName(selection: ModelSelection(instanceId: "custom", model: "gpt-6.1-sol"), instances: [iconInstance]) == "openai")
+            check("model icon recognizes names without a catalog", ProviderIcon.iconName(selection: ModelSelection(instanceId: "custom", model: "deepseek-v3"), instances: []) == "deepseek")
+            check("model icon falls back to the instance driver", ProviderIcon.iconName(selection: ModelSelection(instanceId: "custom", model: "unknown"), instances: [iconInstance]) == "claude")
+            check("unknown model has no provider icon", ProviderIcon.iconName(selection: ModelSelection(instanceId: "unknown", model: "unknown"), instances: []) == nil)
             check("avatar accepts emoji and variation selectors", AppStore.isValidEmoji("🤖") && AppStore.isValidEmoji("❤️"))
             check("avatar accepts skin tones and joined emoji", AppStore.isValidEmoji("👩🏽‍💻") && AppStore.isValidEmoji("👨‍👩‍👧‍👦"))
             check("avatar accepts flags and keycaps", AppStore.isValidEmoji("🇸🇬") && AppStore.isValidEmoji("1️⃣"))
@@ -330,9 +343,25 @@ enum SelfCheck {
                         check("approval card arrives in the transcript", false)
                     }
 
-                    store.setModel(botId: bot.id, selection: ModelSelection(instanceId: "claude", model: "claude-opus-4-1"))
-                    let switched = await waitUntil(store) { $0.bots.first { $0.id == bot.id }?.modelSelection?.model == "claude-opus-4-1" }
-                    check("model switch reaches the bot", switched)
+                    store.setModel(botId: bot.id, threadId: "thread-main", selection: ModelSelection(instanceId: "claude", model: "claude-opus-4-1"))
+                    let switched = await waitUntil(store) { $0.bots.first { $0.id == bot.id }?.task(threadId: "thread-main")?.modelSelection?.model == "claude-opus-4-1" }
+                    check("model switch reaches the conversation", switched)
+                    check("conversation model switch preserves bot default", store.bots.first { $0.id == bot.id }?.modelSelection == bot.modelSelection)
+                    if var defaultSelection = bot.modelSelection {
+                        defaultSelection.effort = "high"
+                        store.patchBot(botId: bot.id, fields: ["modelSelection": defaultSelection.json, "keepThreadModels": true])
+                        let effortSaved = await waitUntil(store) { $0.bots.first { $0.id == bot.id }?.modelSelection == defaultSelection }
+                        check("bot thinking level is saved", effortSaved)
+                        defaultSelection.effort = nil
+                        store.patchBot(botId: bot.id, fields: ["modelSelection": defaultSelection.json, "keepThreadModels": true])
+                        let effortCleared = await waitUntil(store) { $0.bots.first { $0.id == bot.id }?.modelSelection == defaultSelection }
+                        check("bot thinking level can return to default", effortCleared)
+                        check("bot thinking level preserves conversation model", store.bots.first { $0.id == bot.id }?.task(threadId: "thread-main")?.modelSelection?.model == "claude-opus-4-1")
+                    }
+                    store.setModel(botId: bot.id, threadId: "thread-main", selection: ModelSelection(instanceId: "claude", model: "reject-model"))
+                    let rejected = await waitUntil(store) { $0.lastError == "this thread is busy" }
+                    check("model switch shows the server error", rejected)
+                    store.lastError = nil
 
                     store.search("早上")
                     let found = await waitUntil(store) { !$0.searchHits.isEmpty }

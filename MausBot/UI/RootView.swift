@@ -14,6 +14,7 @@ struct RootView: View {
         }
         .frame(minWidth: 940, minHeight: 620)
         .background(Theme.windowBackground)
+        .appFont()
         .sheet(isPresented: $store.showPairingSheet) {
             PairingView(onboarding: false)
                 .frame(width: 520, height: 520)
@@ -75,12 +76,11 @@ struct MainView: View {
                         emptyState
                     }
                 }
-                if let error = store.lastError {
-                    VStack {
-                        Spacer()
+                .overlay(alignment: .top) {
+                    if let error = store.lastError {
                         ErrorBanner(message: error) { store.lastError = nil }
+                            .padding(.top, 18)
                     }
-                    .padding(.bottom, 18)
                 }
             }
         }
@@ -107,7 +107,7 @@ struct MainView: View {
             HStack(spacing: 10) {
                 Image(systemName: "key.slash").foregroundStyle(.red)
                 Text("这台电脑不再信任本设备。请在电脑上重新生成配对码。")
-                    .font(.system(size: 12))
+                    .appFont(size: 12)
                 Spacer()
                 Button("重新配对…") { store.showPairingSheet = true }
                     .controlSize(.small)
@@ -119,7 +119,7 @@ struct MainView: View {
             HStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
                 Text(store.connection.detail)
-                    .font(.system(size: 12))
+                    .appFont(size: 12)
                     .lineLimit(2)
                 Spacer()
                 Button("重新连接") { store.connect() }
@@ -138,9 +138,9 @@ struct MainView: View {
             MascotMark(size: 64)
                 .opacity(0.9)
             Text("选择一个 Bot 开始")
-                .font(.system(size: 15, weight: .medium))
+                .appFont(size: 15, weight: .medium)
             Text("对话、审批和房间都在左侧。可以在左上角切换已配对的电脑。")
-                .font(.system(size: 12))
+                .appFont(size: 12)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
@@ -167,7 +167,7 @@ struct ComputerEditSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("编辑电脑").font(.system(size: 16, weight: .semibold))
+                Text("编辑电脑").appFont(size: 16, weight: .semibold)
                 Spacer()
             }
             .padding(20)
@@ -192,7 +192,7 @@ struct ComputerEditSheet: View {
                                 Spacer()
                                 if route.url == saved.activeURL {
                                     Text("上次使用")
-                                        .font(.system(size: 10.5))
+                                        .appFont(size: 10.5)
                                         .foregroundStyle(.secondary)
                                 }
                             }
@@ -216,7 +216,7 @@ struct ComputerEditSheet: View {
 
             if let saveError {
                 Text(saveError)
-                    .font(.system(size: 11.5))
+                    .appFont(size: 11.5)
                     .foregroundStyle(.red)
                     .padding(.horizontal, 20)
             }
@@ -251,6 +251,8 @@ struct ComputerEditSheet: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
+    @AppStorage(AppFont.preferenceKey) private var fontFamily = ""
+    @State private var fontFamilies = AppFont.availableFamilies
     @State private var showPairing = false
     @State private var forgetId: String?
     @State private var editingComputer: SavedComputer?
@@ -265,6 +267,7 @@ struct SettingsView: View {
                 .tabItem { Label("关于", systemImage: "info.circle") }
         }
         .frame(width: 580, height: 460)
+        .appFont()
         .sheet(isPresented: $showPairing) {
             PairingView(onboarding: false)
                 .frame(width: 520, height: 540)
@@ -296,6 +299,23 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                HStack {
+                    Picker("字体", selection: $fontFamily) {
+                        Text("系统默认").tag("")
+                        ForEach(fontFamilies, id: \.self) { family in
+                            Text(family).tag(family)
+                        }
+                        if !fontFamily.isEmpty, !fontFamilies.contains(fontFamily) {
+                            Text("\(fontFamily)（不可用）").tag(fontFamily)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    Button("还原字体") { fontFamily = "" }
+                        .disabled(fontFamily.isEmpty)
+                }
+                Text("字体预览 · MausBot 0123456789")
+                    .appFont(size: 13)
+                    .foregroundStyle(.secondary)
                 Toggle("Bot 回复时显示通知", isOn: $store.notificationBanners)
             }
             Section("连接") {
@@ -303,7 +323,7 @@ struct SettingsView: View {
                     ConnectionPill(state: store.connection)
                     Spacer()
                     Text(store.connection.detail.isEmpty ? (store.computer?.displayName ?? "") : store.connection.detail)
-                        .font(.system(size: 11.5))
+                        .appFont(size: 11.5)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -316,6 +336,9 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding(8)
+        .onReceive(NotificationCenter.default.publisher(for: NSFont.fontSetChangedNotification)) { _ in
+            fontFamilies = AppFont.availableFamilies
+        }
     }
 
     private var computers: some View {
@@ -327,7 +350,7 @@ struct SettingsView: View {
                     }
                     if store.computers.isEmpty {
                         Text("还没有配对的电脑。")
-                            .font(.system(size: 12.5))
+                            .appFont(size: 12.5)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 30)
@@ -343,7 +366,7 @@ struct SettingsView: View {
                 }
                 Spacer()
                 Text("\(store.computers.count) 台")
-                    .font(.system(size: 11))
+                    .appFont(size: 11)
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14)
@@ -358,16 +381,16 @@ struct SettingsView: View {
         let active = saved.id == store.computer?.id
         return HStack(alignment: .top, spacing: 10) {
             Image(systemName: active ? "desktopcomputer" : "externaldrive.connected.to.line.below")
-                .font(.system(size: 14))
+                .appFont(size: 14)
                 .foregroundStyle(active ? Theme.accent : .secondary)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(saved.displayName)
-                        .font(.system(size: 13, weight: .medium))
+                        .appFont(size: 13, weight: .medium)
                     if active {
                         Text("当前")
-                            .font(.system(size: 9.5, weight: .semibold))
+                            .appFont(size: 9.5, weight: .semibold)
                             .foregroundStyle(Theme.accent)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -378,7 +401,7 @@ struct SettingsView: View {
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
                 Text("\(saved.routes.count) 个地址 · 上次使用 \(relativeTime(saved.lastUsedAt))")
-                    .font(.system(size: 10.5))
+                    .appFont(size: 10.5)
                     .foregroundStyle(.tertiary)
             }
             Spacer()
@@ -406,12 +429,12 @@ struct SettingsView: View {
         VStack(spacing: 12) {
             MascotMark(size: 62)
             Text("MausBot for macOS")
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                .appFont(size: 17, weight: .semibold, design: .rounded)
             Text("版本 \(AppInfo.version)")
-                .font(.system(size: 11.5))
+                .appFont(size: 11.5)
                 .foregroundStyle(.secondary)
             Text("连接另一台电脑上的 OpenMausBot。智脑、工具和文件都留在那台电脑上，这里只负责配对、对话与审批。")
-                .font(.system(size: 12))
+                .appFont(size: 12)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
@@ -419,10 +442,10 @@ struct SettingsView: View {
                 Link("协议参考", destination: URL(string: "https://github.com/johnson020202/OpenMausBot/blob/android/native-companion-client/apps/android/docs/companion-protocol.md")!)
                 Link("OpenMausBot", destination: URL(string: "https://github.com/johnson020202/OpenMausBot")!)
             }
-            .font(.system(size: 11.5))
+            .appFont(size: 11.5)
             .padding(.top, 4)
             Text("配对凭证保存在登录钥匙串；所有请求走本机直连，不经过第三方。")
-                .font(.system(size: 10.5))
+                .appFont(size: 10.5)
                 .foregroundStyle(.tertiary)
                 .padding(.top, 6)
         }

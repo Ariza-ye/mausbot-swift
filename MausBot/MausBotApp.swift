@@ -22,7 +22,6 @@ struct MausBotApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
-                .preferredColorScheme(store.appearance.colorScheme)
                 .task {
                     Notifier.shared.bootstrap()
                     store.start()
@@ -44,7 +43,6 @@ struct MausBotApp: App {
         Settings {
             SettingsView()
                 .environmentObject(store)
-                .preferredColorScheme(store.appearance.colorScheme)
         }
     }
 }
@@ -52,6 +50,7 @@ struct MausBotApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        NSApp.appearance = AppStore.shared.appearance.nsAppearance
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

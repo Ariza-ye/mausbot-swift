@@ -41,10 +41,10 @@ struct PairingView: View {
                 MascotMark(size: 104)
                     .padding(.bottom, 26)
                 Text("MausBot")
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .appFont(size: 30, weight: .semibold, design: .rounded)
                     .foregroundStyle(.white)
                 Text("macOS 桌面客户端")
-                    .font(.system(size: 13, weight: .medium))
+                    .appFont(size: 13, weight: .medium)
                     .foregroundStyle(.white.opacity(0.55))
                     .padding(.top, 4)
                 Spacer()
@@ -63,11 +63,11 @@ struct PairingView: View {
     private func brandPoint(_ symbol: String, _ text: String) -> some View {
         HStack(spacing: 9) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
+                .appFont(size: 12, weight: .medium)
                 .foregroundStyle(Theme.accentBright)
                 .frame(width: 16)
             Text(text)
-                .font(.system(size: 12.5))
+                .appFont(size: 12.5)
                 .foregroundStyle(.white.opacity(0.72))
         }
     }
@@ -113,13 +113,13 @@ private struct PairingForm: View {
             if !onboarding {
                 HStack {
                     Text("配对一台电脑")
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .appFont(size: 20, weight: .semibold, design: .rounded)
                     Spacer()
                     Button {
                         dismissSheet()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 11, weight: .bold))
+                            .appFont(size: 11, weight: .bold)
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
@@ -127,9 +127,9 @@ private struct PairingForm: View {
                 .padding(.bottom, 18)
             } else {
                 Text("连接你的电脑")
-                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .appFont(size: 26, weight: .semibold, design: .rounded)
                 Text("配对码由另一台电脑上的 OpenMausBot 生成。这台 Mac 只作为客户端。")
-                    .font(.system(size: 13))
+                    .appFont(size: 13)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
@@ -161,7 +161,7 @@ private struct PairingForm: View {
 
             if let error {
                 Text(error)
-                    .font(.system(size: 12))
+                    .appFont(size: 12)
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 12)
@@ -171,7 +171,7 @@ private struct PairingForm: View {
                 pairButton
                     .padding(.top, 24)
                 Text("电脑需要已登录并开启“远程访问”。")
-                    .font(.system(size: 11.5))
+                    .appFont(size: 11.5)
                     .foregroundStyle(.tertiary)
                     .padding(.top, 10)
             } else {
@@ -200,7 +200,7 @@ private struct PairingForm: View {
     private var linkFields: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("粘贴电脑上生成的 openmausbot:// 链接")
-                .font(.system(size: 12, weight: .medium))
+                .appFont(size: 12, weight: .medium)
                 .foregroundStyle(.secondary)
             TextField("openmausbot://pair?address=…", text: $link, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -220,11 +220,11 @@ private struct PairingForm: View {
 
             if let invite = parsedInvite {
                 Label("\(invite.serverName) · \(invite.primary?.displayAddress ?? "")", systemImage: "checkmark.seal")
-                    .font(.system(size: 11.5))
+                    .appFont(size: 11.5)
                     .foregroundStyle(Theme.accent)
             } else if !link.trimmingCharacters(in: .whitespaces).isEmpty {
                 Text("还不能识别这个链接")
-                    .font(.system(size: 11.5))
+                    .appFont(size: 11.5)
                     .foregroundStyle(.secondary)
             }
         }
@@ -234,7 +234,7 @@ private struct PairingForm: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("电脑地址")
-                    .font(.system(size: 12, weight: .medium))
+                    .appFont(size: 12, weight: .medium)
                     .foregroundStyle(.secondary)
                 TextField("192.168.1.8:8787", text: $address)
                     .textFieldStyle(.plain)
@@ -250,7 +250,7 @@ private struct PairingForm: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("6 位配对码")
-                    .font(.system(size: 12, weight: .medium))
+                    .appFont(size: 12, weight: .medium)
                     .foregroundStyle(.secondary)
                 TextField("123456", text: $code)
                     .textFieldStyle(.plain)
@@ -266,7 +266,7 @@ private struct PairingForm: View {
                     .onSubmit(submit)
             }
             Text("没写端口时，会依次尝试 8787 和 8810。")
-                .font(.system(size: 11))
+                .appFont(size: 11)
                 .foregroundStyle(.tertiary)
         }
     }
@@ -282,7 +282,7 @@ private struct PairingForm: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Text(probeLabel(route.state))
-                        .font(.system(size: 11))
+                        .appFont(size: 11)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -321,7 +321,7 @@ private struct PairingForm: View {
                     ProgressView().controlSize(.small)
                 }
                 Text(busy ? "正在配对…" : "配对这台电脑")
-                    .font(.system(size: 13, weight: .semibold))
+                    .appFont(size: 13, weight: .semibold)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 9)

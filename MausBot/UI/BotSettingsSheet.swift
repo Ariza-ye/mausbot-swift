@@ -20,9 +20,9 @@ struct BotSettingsSheet: View {
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(bot?.name ?? "Bot")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .appFont(size: 16, weight: .semibold, design: .rounded)
                     Text("运行在 \(store.computer?.displayName ?? "远程电脑")")
-                        .font(.system(size: 11.5))
+                        .appFont(size: 11.5)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -49,7 +49,7 @@ struct BotSettingsSheet: View {
                                         }
                                     }
                                 Text("\(store.emoji(for: botId) == nil ? "默认头像" : "Emoji 图标") · 仅在本机显示")
-                                    .font(.system(size: 11))
+                                    .appFont(size: 11)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -64,7 +64,7 @@ struct BotSettingsSheet: View {
                         HStack(spacing: 8) {
                             TextField("名字", text: $name)
                                 .textFieldStyle(.plain)
-                                .font(.system(size: 13))
+                                .appFont(size: 13)
                                 .padding(8)
                                 .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.subtleFill))
                             Button("保存") { saveName() }
@@ -97,7 +97,8 @@ struct BotSettingsSheet: View {
                                                 selection: ModelSelection(
                                                     instanceId: instance.instanceId,
                                                     model: model.id,
-                                                    effort: bot?.modelSelection?.effort
+                                                    effort: bot?.modelSelection?.effort,
+                                                    variant: bot?.modelSelection?.instanceId == instance.instanceId && bot?.modelSelection?.model == model.id ? bot?.modelSelection?.variant : nil
                                                 )
                                             )
                                         } label: {
@@ -113,11 +114,13 @@ struct BotSettingsSheet: View {
                             }
                         } label: {
                             HStack {
+                                ProviderIcon(selection: bot?.modelSelection, instances: store.instances)
+                                    .foregroundStyle(.secondary)
                                 Text(bot?.modelSelection?.model ?? "未设置")
-                                    .font(.system(size: 12.5))
+                                    .appFont(size: 12.5)
                                 Spacer()
                                 Image(systemName: "chevron.up.chevron.down")
-                                    .font(.system(size: 9))
+                                    .appFont(size: 9)
                                     .foregroundStyle(.tertiary)
                             }
                             .padding(8)
@@ -125,6 +128,54 @@ struct BotSettingsSheet: View {
                         }
                         .menuStyle(.borderlessButton)
                         .menuIndicator(.hidden)
+                    }
+
+                    field("思考强度") {
+                        if let selection = bot?.modelSelection,
+                           let instance = store.instances.first(where: { $0.instanceId == selection.instanceId }) {
+                            let variants = instance.models.first { $0.id == selection.model }?.variants ?? []
+                            let options = instance.modelVariants
+                                ? variants
+                                : instance.effortLevels.map { ModelVariant(id: $0, label: effortLabel($0)) }
+                            let current = instance.modelVariants ? selection.variant : selection.effort
+                            if !options.isEmpty || current != nil {
+                                Menu {
+                                    Button {
+                                        setThinking(nil, selection: selection, usesVariant: instance.modelVariants)
+                                    } label: {
+                                        if current == nil { Label("默认", systemImage: "checkmark") } else { Text("默认") }
+                                    }
+                                    ForEach(options) { option in
+                                        Button {
+                                            setThinking(option.id, selection: selection, usesVariant: instance.modelVariants)
+                                        } label: {
+                                            if current == option.id { Label(option.label, systemImage: "checkmark") } else { Text(option.label) }
+                                        }
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(current.map { value in options.first { $0.id == value }?.label ?? value } ?? "默认")
+                                            .appFont(size: 12.5)
+                                        Spacer()
+                                        Image(systemName: "chevron.up.chevron.down")
+                                            .appFont(size: 9)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .padding(8)
+                                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.subtleFill))
+                                }
+                                .menuStyle(.borderlessButton)
+                                .menuIndicator(.hidden)
+                            } else {
+                                Text("当前模型未提供思考强度选项")
+                                    .appFont(size: 12)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text("请先选择模型")
+                                .appFont(size: 12)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     field("对话") {
@@ -138,11 +189,11 @@ struct BotSettingsSheet: View {
                                 } label: {
                                     HStack(spacing: 7) {
                                         Text(task.title.isEmpty ? "未命名对话" : task.title)
-                                            .font(.system(size: 12.5))
+                                            .appFont(size: 12.5)
                                             .lineLimit(1)
                                         if task.threadId == bot?.threadId {
                                             Text("当前")
-                                                .font(.system(size: 9.5, weight: .semibold))
+                                                .appFont(size: 9.5, weight: .semibold)
                                                 .foregroundStyle(Theme.accent)
                                                 .padding(.horizontal, 5)
                                                 .padding(.vertical, 1)
@@ -162,7 +213,7 @@ struct BotSettingsSheet: View {
                                 dismiss()
                             } label: {
                                 Label("新对话", systemImage: "plus")
-                                    .font(.system(size: 12))
+                                    .appFont(size: 12)
                                     .foregroundStyle(Theme.accent)
                             }
                             .buttonStyle(.plain)
@@ -200,10 +251,32 @@ struct BotSettingsSheet: View {
         loadedName = trimmedName
     }
 
+    private func setThinking(_ value: String?, selection: ModelSelection, usesVariant: Bool) {
+        var next = selection
+        if usesVariant {
+            next.variant = value
+        } else {
+            next.effort = value
+        }
+        store.patchBot(botId: botId, fields: ["modelSelection": next.json, "keepThreadModels": true])
+    }
+
+    private func effortLabel(_ value: String) -> String {
+        switch value {
+        case "none": return "关闭"
+        case "low": return "低"
+        case "medium": return "中"
+        case "high": return "高"
+        case "xhigh": return "极高"
+        case "max": return "最高"
+        default: return value
+        }
+    }
+
     private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .appFont(size: 11, weight: .semibold)
                 .foregroundStyle(.secondary)
             content()
         }
@@ -212,11 +285,11 @@ struct BotSettingsSheet: View {
     private func toggle(_ title: String, systemName: String, on: Bool, set: @escaping (Bool) -> Void) -> some View {
         HStack(spacing: 8) {
             Image(systemName: systemName)
-                .font(.system(size: 11))
+                .appFont(size: 11)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
             Text(title)
-                .font(.system(size: 12.5))
+                .appFont(size: 12.5)
             Spacer()
             Toggle("", isOn: Binding(get: { on }, set: set))
                 .labelsHidden()
@@ -334,7 +407,7 @@ struct BotEmojiPicker: View {
                             search = ""
                         } label: {
                             Text(item.name)
-                                .font(.system(size: 11, weight: category == item.name ? .semibold : .regular))
+                                .appFont(size: 11, weight: category == item.name ? .semibold : .regular)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 6)
                                 .background(RoundedRectangle(cornerRadius: 6).fill(category == item.name ? Theme.accent.opacity(0.12) : .clear))
@@ -374,7 +447,7 @@ struct BotEmojiPicker: View {
             .frame(height: 144)
 
             Divider()
-            Text("自定义 Emoji").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            Text("自定义 Emoji").appFont(size: 11, weight: .semibold).foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 TextField("输入或粘贴一个 Emoji", text: $customEmoji)
                     .textFieldStyle(.roundedBorder)

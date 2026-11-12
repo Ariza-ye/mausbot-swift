@@ -30,9 +30,10 @@ const emit = frame => {
   for (const response of streams) response.write(`id: ${++sequence}\ndata: ${JSON.stringify(frame)}\n\n`);
 };
 let model = { instanceId: 'claude', model: 'claude-sonnet-4-5' };
+let threadModel = model;
 const card = { title: '允许构建？', subtitle: '', options: ['允许', '拒绝'], requestId: 'req-1', requestType: 'permission', tool: 'Bash' };
 messages.push({ id: 'msg-card', role: 'bot', kind: 'options', card, createdAt: Date.now() });
-const bot = () => ({ id: 'bot-1', name: 'E2E Maus', title: '主线', threadId: 'thread-main', tasks: [{ threadId: 'thread-main', title: '主线' }], modelSelection: model, messages, hasMore: false });
+const bot = () => ({ id: 'bot-1', name: 'E2E Maus', title: '主线', threadId: 'thread-main', tasks: [{ threadId: 'thread-main', title: '主线', modelSelection: threadModel }], modelSelection: model, messages, hasMore: false });
 const json = (res, value, status = 200) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(value));
 const harness = createServer(async (req, res) => {
   const path = req.url.split('?')[0];
@@ -65,7 +66,14 @@ const harness = createServer(async (req, res) => {
     emit({ kind: 'message.patch', threadId: 'thread-main', message: { id: 'msg-card', card } });
     return json(res, { ok: true });
   }
-  if (path.endsWith('/model')) { model = body; return json(res, { bot: bot() }); }
+  if (path === '/api/bots/bot-1/tasks/thread-main' && req.method === 'PATCH') {
+    if (body.modelSelection?.model === 'reject-model') return json(res, { error: 'this thread is busy' }, 409);
+    if (!body.modelSelection?.instanceId || !body.modelSelection?.model) return json(res, { error: 'modelSelection required' }, 400);
+    threadModel = body.modelSelection;
+    return json(res, { bot: bot() });
+  }
+  if (path.endsWith('/model') && req.method === 'PATCH') { model = body; return json(res, { bot: bot() }); }
+  if (path === '/api/bots/bot-1' && req.method === 'PATCH' && body.modelSelection) { model = body.modelSelection; return json(res, { bot: bot() }); }
   if (path === '/api/search') return json(res, { hits: [{ threadId: 'thread-main', messageId: 'msg-1', text: '早上好' }] });
   if (path.endsWith('/tasks')) return json(res, { task: { threadId: 'thread-new', title: '新对话' } }, 201);
   return json(res, { ok: true });
