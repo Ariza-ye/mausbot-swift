@@ -28,16 +28,6 @@ struct MausBotApp: App {
                     Notifier.shared.bootstrap()
                     store.start()
                 }
-                .task {
-                    while !Task.isCancelled {
-                        await UpdateChecker.shared.check()
-                        do {
-                            try await Task.sleep(for: .seconds(24 * 60 * 60))
-                        } catch {
-                            break
-                        }
-                    }
-                }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: false))
@@ -68,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.applicationIconImage = icon
         }
         NSApp.appearance = AppStore.shared.appearance.nsAppearance
+        UpdateChecker.shared.startAutomaticChecks()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

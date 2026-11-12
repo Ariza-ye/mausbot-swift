@@ -251,6 +251,7 @@ struct ComputerEditSheet: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
+    @ObservedObject private var updateChecker = UpdateChecker.shared
     @AppStorage(AppFont.preferenceKey) private var fontFamily = ""
     @AppStorage(AppLanguage.preferenceKey) private var language = AppLanguage.chinese.rawValue
     @State private var fontFamilies = AppFont.availableFamilies
@@ -264,6 +265,8 @@ struct SettingsView: View {
                 .tabItem { Label("通用", systemImage: "slider.horizontal.3") }
             computers
                 .tabItem { Label("电脑", systemImage: "desktopcomputer") }
+            updates
+                .tabItem { Label("更新", systemImage: "arrow.triangle.2.circlepath") }
             about
                 .tabItem { Label("关于", systemImage: "info.circle") }
         }
@@ -432,6 +435,40 @@ struct SettingsView: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .stroke(active ? Theme.accent.opacity(0.28) : Theme.hairline, lineWidth: 1)
         )
+    }
+
+    private var updates: some View {
+        Form {
+            Section("软件更新") {
+                Text("当前版本：\(AppInfo.version)")
+                Toggle("自动检查更新", isOn: $updateChecker.automaticallyChecks)
+                Picker("检查频率", selection: $updateChecker.interval) {
+                    Text("每天").tag(UpdateChecker.Interval.daily)
+                    Text("每周").tag(UpdateChecker.Interval.weekly)
+                    Text("每 30 天").tag(UpdateChecker.Interval.monthly)
+                }
+                .disabled(!updateChecker.automaticallyChecks)
+                HStack {
+                    Button("检查更新") { Task { await updateChecker.check() } }
+                        .disabled(updateChecker.isChecking)
+                    if updateChecker.isChecking {
+                        ProgressView().controlSize(.small)
+                        Text("正在检查更新…").foregroundStyle(.secondary)
+                    } else if let result = updateChecker.result {
+                        switch result {
+                        case .upToDate:
+                            Text("已是最新版本").foregroundStyle(.secondary)
+                        case .available(let version):
+                            Link(localized("发现新版本 %@", version), destination: UpdateChecker.releasesURL)
+                        case .failed:
+                            Text("检查更新失败，请稍后重试。").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding(8)
     }
 
     private var about: some View {
