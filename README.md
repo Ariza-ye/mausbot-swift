@@ -13,6 +13,19 @@ See [SPEC.md](SPEC.md) for the requirements. The
 is the protocol reference. The interface is built natively for macOS and does not
 reuse the desktop harness.
 
+## Opening the app for the first time
+
+The current release is not notarized by Apple. If macOS blocks it on first launch,
+open System Settings → Privacy & Security, find the MausBot message, and click
+“Open Anyway”.
+
+If macOS says the app is damaged, make sure you downloaded it from this project's
+official Release and moved it to Applications, then run this in Terminal:
+
+```bash
+sudo xattr -r -d com.apple.quarantine /Applications/MausBot.app
+```
+
 ## Features
 
 - **Multiple computers:** Pair using a link or an address and pairing code, switch computers, set local names, inspect connection addresses, reconnect, and forget devices.

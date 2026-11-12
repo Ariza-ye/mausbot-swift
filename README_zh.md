@@ -10,6 +10,18 @@ OpenMausBot 桌面端，把这台 Mac 当作配对设备：对话、审批卡片
 [companion-protocol.md](https://github.com/johnson020202/OpenMausBot/blob/android/native-companion-client/apps/android/docs/companion-protocol.md)
 为准，界面按原生 macOS 重做，不复用桌面端 harness。
 
+## 首次打开
+
+当前发布版本未经 Apple 公证。首次打开被拦截时，请前往「系统设置」→「隐私与安全性」，
+找到 MausBot 的提示并点击「仍要打开」。
+
+如果提示应用“已损坏”，请确认应用来自本项目的官方 Release，并已拖入「应用程序」文件夹，
+然后在终端执行：
+
+```bash
+sudo xattr -r -d com.apple.quarantine /Applications/MausBot.app
+```
+
 ## 功能
 
 - **多台电脑**：通过配对链接或地址与配对码连接，切换电脑、设置本机备注、查看连接地址、重新连接与忘记设备。
