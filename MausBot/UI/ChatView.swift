@@ -404,7 +404,11 @@ struct ChatView: View {
                input.hasMarkedText() {
                 return .ignored
             }
-            if press.modifiers.contains(.shift) { return .ignored }
+            if press.modifiers.contains(.shift) {
+                guard let editor = NSApp.keyWindow?.firstResponder as? NSTextView else { return .ignored }
+                editor.insertText("\n", replacementRange: editor.selectedRange())
+                return .handled
+            }
             send()
             return .handled
         }
@@ -452,11 +456,12 @@ private struct ComposerSurface: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         if #available(macOS 26.0, *) {
             content.glassEffect(.regular, in: shape)
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
         } else {
             content
                 .background(.regularMaterial, in: shape)
                 .overlay(shape.stroke(Theme.hairline, lineWidth: 1))
-                .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
         }
     }
 }

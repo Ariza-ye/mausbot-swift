@@ -3,7 +3,9 @@ import SwiftUI
 struct SidebarView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.openSettings) private var openSettings
+    @ObservedObject private var updateChecker = UpdateChecker.shared
     @Binding var search: String
+    @State private var newItem: SidebarNewItem?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,6 +27,10 @@ struct SidebarView: View {
             footer
         }
         .background(Theme.sidebarBackground)
+        .sheet(item: $newItem) { item in
+            SidebarNewItemSheet(item: item)
+                .frame(width: 380)
+        }
     }
 
     private var isSearching: Bool {
@@ -174,18 +180,17 @@ struct SidebarView: View {
 
     @ViewBuilder
     private var botList: some View {
-        let sections = sectionGroups
-        if sections.isEmpty {
+        let loose = visibleBots.filter { $0.section == nil }
+        if !loose.isEmpty || sectionNames.isEmpty {
             SectionLabel(text: "BOTS")
-            ForEach(visibleBots) { bot in
+            ForEach(loose) { bot in
                 botRow(bot)
             }
-        } else {
-            ForEach(sections, id: \.title) { section in
-                SectionLabel(text: section.title.uppercased())
-                ForEach(section.bots) { bot in
-                    botRow(bot)
-                }
+        }
+        ForEach(sectionNames, id: \.self) { section in
+            SectionLabel(text: section.uppercased())
+            ForEach(visibleBots.filter { $0.section == section }) { bot in
+                botRow(bot)
             }
         }
         if visibleBots.isEmpty && chiefs.isEmpty {
@@ -193,27 +198,12 @@ struct SidebarView: View {
         }
     }
 
-    private struct BotSection {
-        var title: String
-        var bots: [Bot]
-    }
-
-    private var sectionGroups: [BotSection] {
-        var order: [String] = []
-        var grouped: [String: [Bot]] = [:]
+    private var sectionNames: [String] {
+        var names = store.sections
         for bot in visibleBots {
-            let key = bot.section ?? ""
-            if grouped[key] == nil {
-                grouped[key] = []
-                if !key.isEmpty { order.append(key) }
-            }
-            grouped[key]?.append(bot)
+            if let section = bot.section, !names.contains(section) { names.append(section) }
         }
-        var result = order.map { BotSection(title: $0, bots: grouped[$0] ?? []) }
-        if let loose = grouped[""], !loose.isEmpty {
-            result.insert(BotSection(title: "Bots", bots: loose), at: 0)
-        }
-        return result.count > 1 ? result : []
+        return names
     }
 
     private func botRow(_ bot: Bot) -> some View {
@@ -252,11 +242,31 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button("设置…") { store.settingsBotId = bot.id }
+            if !sectionNames.isEmpty || bot.section != nil {
+                Menu("移动到区段") {
+                    if bot.section != nil {
+                        Button("未分组") { move(bot, to: "") }
+                    }
+                    ForEach(sectionNames.filter { $0 != bot.section }, id: \.self) { section in
+                        Button(section) { move(bot, to: section) }
+                    }
+                }
+            }
             Button(localized(bot.pinned ? "取消置顶" : "置顶")) {
                 store.patchBot(botId: bot.id, fields: ["pinned": !bot.pinned])
             }
             Button(localized(bot.notifications ? "关闭通知" : "开启通知")) {
                 store.patchBot(botId: bot.id, fields: ["notifications": !bot.notifications])
+            }
+        }
+    }
+
+    private func move(_ bot: Bot, to section: String) {
+        Task {
+            do {
+                try await store.createSection(name: section, botIds: [bot.id])
+            } catch {
+                store.lastError = error.localizedDescription
             }
         }
     }
@@ -356,6 +366,39 @@ struct SidebarView: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
+            Menu {
+                Button { search = ""; store.showNewBotSheet = true } label: {
+                    Label("新建机器人", systemImage: "person.badge.plus")
+                        .labelStyle(.titleAndIcon)
+                }
+                Button { search = ""; newItem = .section } label: {
+                    Label("添加区段", systemImage: "rectangle.split.3x1")
+                        .labelStyle(.titleAndIcon)
+                }
+                Button { search = ""; newItem = .group } label: {
+                    Label("新建群组", systemImage: "person.2.badge.plus")
+                        .labelStyle(.titleAndIcon)
+                }
+            } label: {
+                Image(systemName: "plus")
+                    .appFont(size: 13, weight: .medium)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 26, height: 26)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .frame(width: 26)
+            .help("新建")
+            .accessibilityLabel("新建")
+            if let version = updateChecker.latestVersion {
+                Link(destination: UpdateChecker.releasesURL) {
+                    Label(localized("发现新版本 %@", version), systemImage: "arrow.down.circle.fill")
+                        .appFont(size: 11, weight: .medium)
+                        .foregroundStyle(Theme.accent)
+                        .lineLimit(1)
+                }
+                .help("前往 GitHub 下载最新版本")
+            }
             Spacer()
 
             Button {

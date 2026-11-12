@@ -48,6 +48,10 @@ enum SelfCheck {
         }
 
         if command == "protocol" || command == "all" {
+            check("update detects a newer numeric release", UpdateChecker.isNewer("v0.1.10", than: "0.1.9") == true)
+            check("update ignores the same release", UpdateChecker.isNewer("v0.1.1", than: "0.1.1.0") == false)
+            check("update ignores older releases", UpdateChecker.isNewer("v0.1.1", than: "0.2.0") == false)
+            check("update rejects invalid release tags", UpdateChecker.isNewer("v0.2.0-beta", than: "0.1.1") == nil)
             let english = AppLanguage.current == .english
             check("selected language loads localized strings", localized("重新连接") == (english ? "Reconnect" : "重新连接"))
             check("localized strings format dynamic values", localized("正在连接 %@…", "Mac") == (english ? "Connecting to Mac…" : "正在连接 Mac…"))

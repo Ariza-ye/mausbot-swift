@@ -54,6 +54,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var connection = ConnectionState()
     @Published private(set) var bots: [Bot] = []
     @Published private(set) var groups: [ChatGroup] = []
+    @Published private(set) var sections: [String] = []
     @Published private(set) var instances: [ProviderInstance] = []
     @Published private(set) var open: OpenChat?
     @Published private(set) var threads: [String: ThreadState] = [:]
@@ -82,6 +83,7 @@ final class AppStore: ObservableObject {
         static let notifications = "notificationBanners"
         static let appearance = "appearance"
         static let botEmojis = "botEmojis"
+        static let sections = "sidebarSections"
     }
 
     private let store = ComputerStore.shared
@@ -258,6 +260,7 @@ final class AppStore: ObservableObject {
         client = nil
         bots = []
         groups = []
+        sections = (UserDefaults.standard.dictionary(forKey: Keys.sections) as? [String: [String]])?[target.id] ?? []
         threads = [:]
         instances = []
         searchHits = []
@@ -289,6 +292,7 @@ final class AppStore: ObservableObject {
         connection = ConnectionState(phase: .idle, serverName: computer?.serverName ?? "")
         bots = []
         groups = []
+        sections = []
         threads = [:]
         open = nil
     }
@@ -498,6 +502,7 @@ final class AppStore: ObservableObject {
         }
         bots = parsedBots
         groups = parsedGroups
+        if answer.array("sections") != nil { updateSections(answer.strArray("sections")) }
         applyOrder()
         seed(botJSON: botJSON, groupJSON: groupJSON)
         if instances.isEmpty { await loadInstances() }
@@ -710,6 +715,9 @@ extension AppStore {
             guard frame.array("botIds") != nil else { return }
             serverOrder = frame.strArray("botIds")
             applyOrder()
+        case "sections":
+            guard frame.array("sections") != nil else { return }
+            updateSections(frame.strArray("sections"))
         case "group":
             guard let json = frame.obj("group"), let group = ChatGroup(json: json) else { return }
             if let index = groups.firstIndex(where: { $0.id == group.id }) {
@@ -1044,6 +1052,43 @@ extension AppStore {
             lastError = error.localizedDescription
             return nil
         }
+    }
+
+    private func updateSections(_ value: [String]) {
+        sections = value
+        guard let id = computer?.id else { return }
+        var saved = UserDefaults.standard.dictionary(forKey: Keys.sections) as? [String: [String]] ?? [:]
+        saved[id] = value
+        UserDefaults.standard.set(saved, forKey: Keys.sections)
+    }
+
+    func createSection(name: String, botIds: [String]) async throws {
+        guard let client else { throw APIError(status: 0, message: localized("尚未连接电脑"), body: nil) }
+        let expected = generation
+        let answer = try await client.post("/api/sidebar-sections", body: ["name": name, "botIds": botIds])
+        guard expected == generation else { throw CancellationError() }
+        if answer.array("sections") != nil { updateSections(answer.strArray("sections")) }
+        for json in answer.objArray("bots") {
+            if let bot = Bot(json: json) { upsert(bot) }
+        }
+    }
+
+    func createGroup(name: String, memberIds: [String]) async throws {
+        guard let client else { throw APIError(status: 0, message: localized("尚未连接电脑"), body: nil) }
+        let expected = generation
+        var body: JSON = ["memberIds": memberIds]
+        if !name.isEmpty { body["name"] = name }
+        let answer = try await client.post("/api/groups", body: body)
+        guard expected == generation else { throw CancellationError() }
+        guard let json = answer.obj("group"), let group = ChatGroup(json: json), !group.threadId.isEmpty else {
+            throw APIError(status: 0, message: localized("创建群组后未收到有效结果"), body: nil)
+        }
+        if let index = groups.firstIndex(where: { $0.id == group.id }) {
+            groups[index] = group
+        } else {
+            groups.append(group)
+        }
+        open(group: group)
     }
 
     func deleteQueued(threadId: String, queueId: String) {
