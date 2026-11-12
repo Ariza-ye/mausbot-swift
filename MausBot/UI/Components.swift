@@ -1,6 +1,108 @@
 import AppKit
 import SwiftUI
 
+struct SlimScrollbar: NSViewRepresentable {
+    func makeNSView(context: Context) -> SlimScrollbarView {
+        SlimScrollbarView()
+    }
+
+    func updateNSView(_ nsView: SlimScrollbarView, context: Context) {
+        nsView.configureScroller()
+    }
+}
+
+final class SlimScrollbarView: NSView {
+    private weak var observedClipView: NSClipView?
+    private var lastOrigin = NSPoint.zero
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        configureScroller()
+    }
+
+    func configureScroller() {
+        guard window != nil, let scrollView = enclosingScrollView else {
+            stopObserving()
+            return
+        }
+        scrollView.scrollerStyle = .legacy
+        if !(scrollView.verticalScroller is SlimVerticalScroller) {
+            scrollView.verticalScroller = SlimVerticalScroller()
+        }
+        scrollView.autohidesScrollers = true
+        let clipView = scrollView.contentView
+        if observedClipView !== clipView {
+            stopObserving()
+            observedClipView = clipView
+            lastOrigin = clipView.bounds.origin
+            clipView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(boundsDidChange),
+                name: NSView.boundsDidChangeNotification, object: clipView
+            )
+        }
+    }
+
+    @objc private func boundsDidChange(_ notification: Notification) {
+        guard let clipView = observedClipView, clipView.bounds.origin != lastOrigin else { return }
+        lastOrigin = clipView.bounds.origin
+        (clipView.enclosingScrollView?.verticalScroller as? SlimVerticalScroller)?.showTemporarily()
+    }
+
+    private func stopObserving() {
+        if let observedClipView {
+            NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification, object: observedClipView)
+        }
+        observedClipView = nil
+    }
+}
+
+final class SlimVerticalScroller: NSScroller {
+    private var hideTimer: Timer?
+    private var isDragging = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        alphaValue = 0
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        alphaValue = 0
+    }
+
+    func showTemporarily() {
+        hideTimer?.invalidate()
+        alphaValue = 1
+        guard !isDragging else { return }
+        let timer = Timer(timeInterval: 1.2, repeats: false) { [weak self] _ in
+            guard let self, !self.isDragging else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.2
+                self.animator().alphaValue = 0
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        hideTimer = timer
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        isDragging = true
+        hideTimer?.invalidate()
+        super.mouseDown(with: event)
+        isDragging = false
+        showTemporarily()
+    }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {}
+
+    override func drawKnob() {
+        let knob = rect(for: .knob).insetBy(dx: 3, dy: 2)
+        NSColor.secondaryLabelColor.withAlphaComponent(0.45).setFill()
+        NSBezierPath(roundedRect: knob, xRadius: knob.width / 2, yRadius: knob.width / 2).fill()
+    }
+}
+
 struct SidebarResizeHandle: NSViewRepresentable {
     let minWidth: CGFloat
     let maxWidth: CGFloat

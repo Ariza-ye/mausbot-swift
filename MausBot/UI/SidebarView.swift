@@ -23,6 +23,7 @@ struct SidebarView: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.bottom, 12)
+                .background(SlimScrollbar())
             }
             footer
         }

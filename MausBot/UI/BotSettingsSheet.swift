@@ -227,6 +227,7 @@ struct BotSettingsSheet: View {
                         .textSelection(.enabled)
                 }
                 .padding(18)
+                .background(SlimScrollbar())
             }
         }
         .onAppear {

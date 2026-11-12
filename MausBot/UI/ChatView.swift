@@ -234,6 +234,7 @@ struct ChatView: View {
                 .padding(.bottom, 10)
                 .frame(maxWidth: 780)
                 .frame(maxWidth: .infinity)
+                .background(SlimScrollbar())
             }
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 96

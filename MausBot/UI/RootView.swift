@@ -175,6 +175,7 @@ struct ComputerEditSheet: View {
             Form {
                 Section {
                     TextField("本机备注", text: $localName, prompt: Text(saved.serverName))
+                        .background(SlimScrollbar())
                     LabeledContent("远程名称", value: saved.serverName)
                         .textSelection(.enabled)
                 } header: {
@@ -303,6 +304,7 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .background(SlimScrollbar())
             }
             Section("外观") {
                 Picker("主题", selection: $store.appearance) {
@@ -369,6 +371,7 @@ struct SettingsView: View {
                     }
                 }
                 .padding(14)
+                .background(SlimScrollbar())
             }
             HStack {
                 Button {
@@ -441,6 +444,7 @@ struct SettingsView: View {
         Form {
             Section("软件更新") {
                 Text("当前版本：\(AppInfo.version)")
+                    .background(SlimScrollbar())
                 Toggle("自动检查更新", isOn: $updateChecker.automaticallyChecks)
                 Picker("检查频率", selection: $updateChecker.interval) {
                     Text("每天").tag(UpdateChecker.Interval.daily)

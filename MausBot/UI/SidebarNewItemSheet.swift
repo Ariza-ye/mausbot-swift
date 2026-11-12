@@ -57,6 +57,7 @@ struct SidebarNewItemSheet: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(SlimScrollbar())
                 }
                 .frame(height: min(CGFloat(bots.count) * 36, 180))
             }
