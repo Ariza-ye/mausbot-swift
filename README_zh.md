@@ -26,7 +26,7 @@ OpenMausBot 桌面端，把这台 Mac 当作配对设备：对话、审批卡片
 
 ## 构建与运行
 
-需要 macOS 15+ 与 Xcode 16+。
+需要 macOS 15+ 与 Xcode 26+。
 
 ```bash
 xcodebuild -project MausBot.xcodeproj -scheme MausBot -configuration Debug -derivedDataPath build build

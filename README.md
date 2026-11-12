@@ -30,7 +30,7 @@ are not currently supported; their controls are not exposed.
 
 ## Build and run
 
-Requires macOS 15+ and Xcode 16+.
+Requires macOS 15+ and Xcode 26+.
 
 ```bash
 xcodebuild -project MausBot.xcodeproj -scheme MausBot -configuration Debug -derivedDataPath build build

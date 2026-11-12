@@ -17,6 +17,8 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - name: 检出版本标签
         uses: actions/checkout@v4
@@ -27,6 +29,7 @@ jobs:
         run: |
           mkdir -p build-release
           if ! ./scripts/package-dmg.sh; then
+            grep -n 'error:' build-release/package-build.log || true
             tail -n 100 build-release/package-build.log || true
             exit 1
           fi
