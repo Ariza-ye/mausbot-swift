@@ -48,6 +48,10 @@ enum SelfCheck {
         }
 
         if command == "protocol" || command == "all" {
+            let english = AppLanguage.current == .english
+            check("selected language loads localized strings", localized("重新连接") == (english ? "Reconnect" : "重新连接"))
+            check("localized strings format dynamic values", localized("正在连接 %@…", "Mac") == (english ? "Connecting to Mac…" : "正在连接 Mac…"))
+            check("unknown localization keys fall back to the original", localized("missing.localization.key") == "missing.localization.key")
             let iconInstance = ProviderInstance(json: ["instanceId": "custom", "driverKind": "claude", "models": ["options": [["id": "gpt-6.1-sol", "provider": "openai"]]]])!
             let reasoningInstance = ProviderInstance(json: [
                 "instanceId": "reasoning",

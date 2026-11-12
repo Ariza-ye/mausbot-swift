@@ -7,9 +7,9 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
+        case .system: return localized("跟随系统")
+        case .light: return localized("浅色")
+        case .dark: return localized("深色")
         }
     }
     var nsAppearance: NSAppearance? {
@@ -149,7 +149,7 @@ final class AppStore: ObservableObject {
         guard !routes.isEmpty else { throw PairingError.invalidAddress }
         pairing = PairingProgress(
             running: true,
-            step: "正在探测 \(invite.serverName)…",
+            step: localized("正在探测 %@…", invite.serverName),
             routes: routes.map { RouteProbe(url: $0.url, address: $0.displayAddress) }
         )
         let pairRequestId = UUID().uuidString
@@ -173,7 +173,7 @@ final class AppStore: ObservableObject {
                 var saved = SavedComputer.from(pairResult: result, invite: invite, winner: route)
                 if saved.serverName.isEmpty { saved.serverName = invite.serverName }
                 guard store.setToken(result.token, for: saved.id) else {
-                    throw APIError(status: 500, message: "设备令牌无法保存到钥匙串，配对尚未完成。", body: nil)
+                    throw APIError(status: 500, message: localized("设备令牌无法保存到钥匙串，配对尚未完成。"), body: nil)
                 }
                 saved = store.upsert(saved)
                 store.selectedId = saved.id
@@ -200,7 +200,7 @@ final class AppStore: ObservableObject {
 
     func pair(link: String) async throws -> SavedComputer {
         guard let invite = PairingInvite.parse(link) else {
-            throw PairingError.rejected("链接格式不对。请粘贴电脑上生成的 openmausbot:// 配对链接。")
+            throw PairingError.rejected(localized("链接格式不对。请粘贴电脑上生成的 openmausbot:// 配对链接。"))
         }
         return try await pair(with: invite)
     }
@@ -266,7 +266,7 @@ final class AppStore: ObservableObject {
         lastCursorWrite = .distantPast
         open = nil
         ImageCache.shared.clear()
-        connection = ConnectionState(phase: .connecting, detail: "正在连接 \(target.serverName)…", serverName: target.serverName)
+        connection = ConnectionState(phase: .connecting, detail: localized("正在连接 %@…", target.serverName), serverName: target.serverName)
         lastError = nil
         connectionTask = Task { [weak self] in
             await self?.runConnection(target, token)
@@ -295,12 +295,12 @@ final class AppStore: ObservableObject {
 
     private func runConnection(_ target: SavedComputer, _ token: Int) async {
         guard let deviceToken = store.token(for: target.id) else {
-            connection = ConnectionState(phase: .unauthorized, detail: "这台电脑的凭证已丢失，请重新配对。", serverName: target.serverName)
+            connection = ConnectionState(phase: .unauthorized, detail: localized("这台电脑的凭证已丢失，请重新配对。"), serverName: target.serverName)
             return
         }
         var routes = target.automaticRoutes
         guard !routes.isEmpty else {
-            connection = ConnectionState(phase: .error, detail: "这台电脑没有可用的地址。", serverName: target.serverName)
+            connection = ConnectionState(phase: .error, detail: localized("这台电脑没有可用的地址。"), serverName: target.serverName)
             return
         }
         var routeIndex = 0
@@ -311,7 +311,7 @@ final class AppStore: ObservableObject {
             let route = routes[min(routeIndex, routes.count - 1)]
             connection = ConnectionState(
                 phase: attempt == 0 ? .connecting : .offline,
-                detail: "正在连接 \(route.displayAddress)…",
+                detail: localized("正在连接 %@…", route.displayAddress),
                 serverName: current.serverName
             )
             do {
@@ -334,7 +334,7 @@ final class AppStore: ObservableObject {
                 guard token == generation, !Task.isCancelled else { return }
                 let app = health.str("app") ?? ""
                 guard app == "openmausbot" || app == "mausbot" else {
-                    throw APIError(status: 400, message: "这个地址不是 OpenMausBot。", body: nil)
+                    throw APIError(status: 400, message: localized("这个地址不是 OpenMausBot。"), body: nil)
                 }
                 client = api
                 connection = ConnectionState(
@@ -389,7 +389,7 @@ final class AppStore: ObservableObject {
                 attempt += 1
                 connection = ConnectionState(
                     phase: .offline,
-                    detail: "连不上 \(route.displayAddress)，正在重试…",
+                    detail: localized("连不上 %@，正在重试…", route.displayAddress),
                     serverName: current.serverName
                 )
                 if routes.count > 1 { routeIndex = (routeIndex + 1) % routes.count }
@@ -434,7 +434,7 @@ final class AppStore: ObservableObject {
             if let error = failure as? APIError, error.isUnauthorized { throw error }
             if token != generation { return }
             attempt += 1
-            connection = ConnectionState(phase: .offline, detail: "连接断开，正在重连…", serverName: serverName)
+            connection = ConnectionState(phase: .offline, detail: localized("连接断开，正在重连…"), serverName: serverName)
             await sleep(backoff(attempt))
         }
     }
@@ -597,7 +597,7 @@ final class AppStore: ObservableObject {
             } else if let group = self.groups.first(where: { $0.threadId == threadId }) {
                 self.open(group: group)
             } else {
-                self.lastError = "找不到这个会话。"
+                self.lastError = localized("找不到这个会话。")
             }
         }
     }
@@ -838,7 +838,7 @@ extension AppStore {
     func send(text: String, attachments: [Attachment] = []) {
         guard let chat = open else { return }
         guard let client else {
-            lastError = "还没有连上电脑，消息没有发送。"
+            lastError = localized("还没有连上电脑，消息没有发送。")
             return
         }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -894,7 +894,7 @@ extension AppStore {
     func interrupt() {
         guard let chat = open else { return }
         guard let client else {
-            lastError = "还没有连上电脑，停止请求没有发送。"
+            lastError = localized("还没有连上电脑，停止请求没有发送。")
             return
         }
         Task { [weak self] in
@@ -918,7 +918,7 @@ extension AppStore {
     func respond(threadId: String, card: Card, answer: String) {
         guard let requestId = card.requestId else { return }
         guard let client else {
-            lastError = "还没有连上电脑，回复没有发送。"
+            lastError = localized("还没有连上电脑，回复没有发送。")
             return
         }
         let behavior = card.isApproval ? Card.behavior(for: answer) : "answer"
@@ -1017,7 +1017,7 @@ extension AppStore {
     func newThread(botId: String) async {
         guard let client else { return }
         do {
-            let answer = try await client.post("/api/bots/\(botId)/tasks", body: ["title": "新对话"])
+            let answer = try await client.post("/api/bots/\(botId)/tasks", body: ["title": localized("新对话")])
             try? await refreshAll(client)
             if let json = answer.obj("task"), let task = BotTask(json: json), let bot = bots.first(where: { $0.id == botId }) {
                 open(bot: bot, threadId: task.threadId, title: task.title)
@@ -1054,31 +1054,31 @@ extension AppStore {
     }
 
     func uploadImage(from url: URL) async throws -> Attachment {
-        guard let client else { throw APIError(status: 0, message: "尚未连接电脑", body: nil) }
+        guard let client else { throw APIError(status: 0, message: localized("尚未连接电脑"), body: nil) }
         let gaining = url.startAccessingSecurityScopedResource()
         defer { if gaining { url.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: url)
         guard data.count <= 20 * 1024 * 1024 else {
-            throw APIError(status: 0, message: "图片超过 20 MB", body: nil)
+            throw APIError(status: 0, message: localized("图片超过 20 MB"), body: nil)
         }
         let mime = Self.mimeType(for: url)
         let answer = try await client.uploadImage(data: data, mime: mime, filename: url.lastPathComponent)
         guard let path = answer.nonEmpty("url") ?? answer.nonEmpty("path") else {
-            throw APIError(status: 0, message: "上传没有返回附件路径", body: nil)
+            throw APIError(status: 0, message: localized("上传没有返回附件路径"), body: nil)
         }
         return Attachment(kind: "image", path: path, mime: mime, name: url.lastPathComponent)
     }
 
     func imageData(path: String) async throws -> Data {
         if let cached = ImageCache.shared.value(for: path) { return cached }
-        guard let client else { throw APIError(status: 0, message: "尚未连接电脑", body: nil) }
+        guard let client else { throw APIError(status: 0, message: localized("尚未连接电脑"), body: nil) }
         let data = try await client.bytes(path)
         ImageCache.shared.store(data, for: path)
         return data
     }
 
     func download(_ attachment: Attachment, threadId: String, messageId: String) async throws -> Data {
-        guard let client else { throw APIError(status: 0, message: "尚未连接电脑", body: nil) }
+        guard let client else { throw APIError(status: 0, message: localized("尚未连接电脑"), body: nil) }
         if attachment.isImage || attachment.isAudio {
             return try await client.bytes(attachment.path)
         }
@@ -1087,7 +1087,7 @@ extension AppStore {
     }
 
     func exportThread(_ threadId: String) async throws -> Data {
-        guard let client else { throw APIError(status: 0, message: "尚未连接电脑", body: nil) }
+        guard let client else { throw APIError(status: 0, message: localized("尚未连接电脑"), body: nil) }
         return try await client.bytes("/api/threads/\(threadId)/export?format=markdown")
     }
 

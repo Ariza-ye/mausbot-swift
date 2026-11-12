@@ -21,7 +21,7 @@ struct BotSettingsSheet: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(bot?.name ?? "Bot")
                         .appFont(size: 16, weight: .semibold, design: .rounded)
-                    Text("运行在 \(store.computer?.displayName ?? "远程电脑")")
+                    Text(localized("运行在 %@", store.computer?.displayName ?? localized("远程电脑")))
                         .appFont(size: 11.5)
                         .foregroundStyle(.secondary)
                 }
@@ -48,7 +48,7 @@ struct BotSettingsSheet: View {
                                             showIconPicker = false
                                         }
                                     }
-                                Text("\(store.emoji(for: botId) == nil ? "默认头像" : "Emoji 图标") · 仅在本机显示")
+                                Text(localized("%@ · 仅在本机显示", localized(store.emoji(for: botId) == nil ? "默认头像" : "Emoji 图标")))
                                     .appFont(size: 11)
                                     .foregroundStyle(.secondary)
                             }
@@ -116,7 +116,7 @@ struct BotSettingsSheet: View {
                             HStack {
                                 ProviderIcon(selection: bot?.modelSelection, instances: store.instances)
                                     .foregroundStyle(.secondary)
-                                Text(bot?.modelSelection?.model ?? "未设置")
+                                Text(bot?.modelSelection?.model ?? localized("未设置"))
                                     .appFont(size: 12.5)
                                 Spacer()
                                 Image(systemName: "chevron.up.chevron.down")
@@ -154,7 +154,7 @@ struct BotSettingsSheet: View {
                                     }
                                 } label: {
                                     HStack {
-                                        Text(current.map { value in options.first { $0.id == value }?.label ?? value } ?? "默认")
+                                        Text(current.map { value in options.first { $0.id == value }?.label ?? value } ?? localized("默认"))
                                             .appFont(size: 12.5)
                                         Spacer()
                                         Image(systemName: "chevron.up.chevron.down")
@@ -188,7 +188,7 @@ struct BotSettingsSheet: View {
                                     dismiss()
                                 } label: {
                                     HStack(spacing: 7) {
-                                        Text(task.title.isEmpty ? "未命名对话" : task.title)
+                                        Text(task.title.isEmpty ? localized("未命名对话") : task.title)
                                             .appFont(size: 12.5)
                                             .lineLimit(1)
                                         if task.threadId == bot?.threadId {
@@ -263,19 +263,19 @@ struct BotSettingsSheet: View {
 
     private func effortLabel(_ value: String) -> String {
         switch value {
-        case "none": return "关闭"
-        case "low": return "低"
-        case "medium": return "中"
-        case "high": return "高"
-        case "xhigh": return "极高"
-        case "max": return "最高"
+        case "none": return localized("关闭思考")
+        case "low": return localized("低")
+        case "medium": return localized("中")
+        case "high": return localized("高")
+        case "xhigh": return localized("极高")
+        case "max": return localized("最高")
         default: return value
         }
     }
 
     private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title)
+            Text(localized(title))
                 .appFont(size: 11, weight: .semibold)
                 .foregroundStyle(.secondary)
             content()
@@ -288,7 +288,7 @@ struct BotSettingsSheet: View {
                 .appFont(size: 11)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
-            Text(title)
+            Text(localized(title))
                 .appFont(size: 12.5)
             Spacer()
             Toggle("", isOn: Binding(get: { on }, set: set))
@@ -406,7 +406,7 @@ struct BotEmojiPicker: View {
                             category = item.name
                             search = ""
                         } label: {
-                            Text(item.name)
+                            Text(localized(item.name))
                                 .appFont(size: 11, weight: category == item.name ? .semibold : .regular)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 6)

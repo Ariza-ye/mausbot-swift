@@ -153,10 +153,10 @@ struct ApiClient {
             let filename = URL(fileURLWithPath: path).lastPathComponent
             url = URL(string: baseURL + "/api/attachments/")?.appendingPathComponent(filename)
         }
-        guard let url else { throw APIError(status: 0, message: "附件地址无效", body: nil) }
+        guard let url else { throw APIError(status: 0, message: localized("附件地址无效"), body: nil) }
         guard let origin = URL(string: baseURL),
               url.scheme == origin.scheme, url.host == origin.host, url.port == origin.port else {
-            throw APIError(status: 0, message: "附件必须来自已配对的电脑。", body: nil)
+            throw APIError(status: 0, message: localized("附件必须来自已配对的电脑。"), body: nil)
         }
         return url
     }
@@ -174,7 +174,7 @@ struct ApiClient {
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         let prepared = try await prepare(request)
         let (data, response) = try await Self.session.data(for: prepared)
-        guard let http = response as? HTTPURLResponse else { throw APIError(status: 0, message: "没有响应", body: nil) }
+        guard let http = response as? HTTPURLResponse else { throw APIError(status: 0, message: localized("没有响应"), body: nil) }
         guard (200..<300).contains(http.statusCode) else {
             throw APIError(status: http.statusCode, message: errorMessage(data, status: http.statusCode), body: String(data: data, encoding: .utf8))
         }
@@ -185,7 +185,7 @@ struct ApiClient {
     /// filename and answers with the reference path.
     func uploadImage(data: Data, mime: String, filename: String) async throws -> JSON {
         guard let url = URL(string: baseURL + "/api/attachments") else {
-            throw APIError(status: 0, message: "上传地址无效", body: nil)
+            throw APIError(status: 0, message: localized("上传地址无效"), body: nil)
         }
         let boundary = "omb-" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
         var body = Data()
@@ -203,7 +203,7 @@ struct ApiClient {
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         let prepared = try await prepare(request)
         let (responseData, response) = try await Self.session.upload(for: prepared, from: body)
-        guard let http = response as? HTTPURLResponse else { throw APIError(status: 0, message: "没有响应", body: nil) }
+        guard let http = response as? HTTPURLResponse else { throw APIError(status: 0, message: localized("没有响应"), body: nil) }
         guard (200..<300).contains(http.statusCode) else {
             throw APIError(status: http.statusCode, message: errorMessage(responseData, status: http.statusCode), body: String(data: responseData, encoding: .utf8))
         }
@@ -221,7 +221,7 @@ struct ApiClient {
         }
         let answer = try await send("POST", "/api/pair", body: body, authenticated: false, timeout: timeout)
         guard let deviceToken = answer.nonEmpty("token") else {
-            throw APIError(status: 401, message: "电脑没有返回设备令牌", body: nil)
+            throw APIError(status: 401, message: localized("电脑没有返回设备令牌"), body: nil)
         }
         let device = answer.obj("device")
         let endpoints = parseEndpoints(answer.array("endpoints"))
@@ -284,7 +284,7 @@ struct ApiClient {
 
     private func send(_ method: String, _ path: String, body: JSON?, authenticated: Bool, timeout: TimeInterval = 30) async throws -> JSON {
         guard let url = URL(string: baseURL + path) else {
-            throw APIError(status: 0, message: "地址无效：\(baseURL + path)", body: nil)
+            throw APIError(status: 0, message: localized("地址无效：%@", baseURL + path), body: nil)
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -294,7 +294,7 @@ struct ApiClient {
         if authenticated, let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             guard let data = jsonData(body) else {
-                throw APIError(status: 0, message: "请求内容无法编码", body: nil)
+                throw APIError(status: 0, message: localized("请求内容无法编码"), body: nil)
             }
             request.httpBody = data
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -302,7 +302,7 @@ struct ApiClient {
         let prepared = try await prepare(request)
         let (data, response) = try await Self.session.data(for: prepared)
         guard let http = response as? HTTPURLResponse else {
-            throw APIError(status: 0, message: "没有响应", body: nil)
+            throw APIError(status: 0, message: localized("没有响应"), body: nil)
         }
         guard (200..<300).contains(http.statusCode) else {
             throw APIError(status: http.statusCode, message: errorMessage(data, status: http.statusCode), body: String(data: data, encoding: .utf8))
@@ -319,10 +319,10 @@ struct ApiClient {
             return text
         }
         switch status {
-        case 426: return "远程电脑要求端到端加密连接。请使用 0.1.1 或更新版本，并在电脑上生成新的配对链接。"
-        case 401: return "这台电脑不再信任本设备，请在电脑上重新配对。"
-        case 404: return "电脑上没有这个接口（HTTP 404）。"
-        default: return "请求失败（HTTP \(status)）"
+        case 426: return localized("远程电脑要求端到端加密连接。请使用 0.1.1 或更新版本，并在电脑上生成新的配对链接。")
+        case 401: return localized("这台电脑不再信任本设备，请在电脑上重新配对。")
+        case 404: return localized("电脑上没有这个接口（HTTP 404）。")
+        default: return localized("请求失败（HTTP %lld）", Int64(status))
         }
     }
 }

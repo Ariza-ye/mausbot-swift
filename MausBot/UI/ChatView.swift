@@ -121,9 +121,9 @@ struct ChatView: View {
                     store.open(bot: bot, threadId: task.threadId)
                 } label: {
                     if task.threadId == chat.threadId {
-                        Label(task.title.isEmpty ? "未命名对话" : task.title, systemImage: "checkmark")
+                        Label(task.title.isEmpty ? localized("未命名对话") : task.title, systemImage: "checkmark")
                     } else {
-                        Text(task.title.isEmpty ? "未命名对话" : task.title)
+                        Text(task.title.isEmpty ? localized("未命名对话") : task.title)
                     }
                 }
             }
@@ -144,7 +144,7 @@ struct ChatView: View {
     }
 
     private func shortModelName(_ selection: ModelSelection?) -> String {
-        guard let selection else { return "模型" }
+        guard let selection else { return localized("模型") }
         let instance = store.instances.first { $0.instanceId == selection.instanceId }
         return instance?.models.first { $0.id == selection.model }?.label ?? selection.model
     }
@@ -153,7 +153,7 @@ struct ChatView: View {
         Menu {
             if let bot {
                 Button("Bot 设置…") { store.settingsBotId = bot.id }
-                Button(bot.pinned ? "取消置顶" : "置顶") {
+                Button(localized(bot.pinned ? "取消置顶" : "置顶")) {
                     store.patchBot(botId: bot.id, fields: ["pinned": !bot.pinned])
                 }
             }
@@ -164,7 +164,7 @@ struct ChatView: View {
                         let data = try await store.exportThread(chat.threadId)
                         let panel = NSSavePanel()
                         panel.allowedContentTypes = [.plainText]
-                        panel.nameFieldStringValue = "对话.md"
+                        panel.nameFieldStringValue = localized("对话.md")
                         guard await panel.begin() == .OK, let url = panel.url else { return }
                         try data.write(to: url, options: .atomic)
                     } catch {
@@ -279,7 +279,7 @@ struct ChatView: View {
             Image(systemName: "bubble.left.and.bubble.right")
                 .appFont(size: 22, weight: .light)
                 .foregroundStyle(.tertiary)
-            Text(bot == nil ? "房间还没有消息" : "和 \(bot?.name ?? "Bot") 说点什么")
+            Text(bot == nil ? localized("房间还没有消息") : localized("和 %@ 说点什么", bot?.name ?? "Bot"))
                 .appFont(size: 12.5)
                 .foregroundStyle(.secondary)
         }
@@ -308,7 +308,7 @@ struct ChatView: View {
                     .buttonStyle(.plain)
                     .disabled(group != nil || uploading)
                     .opacity(group == nil && !uploading ? 1 : 0.4)
-                    .help(group == nil ? "附加图片" : "房间里只发送文字")
+                    .help(localized(group == nil ? "附加图片" : "房间里只发送文字"))
                     .accessibilityLabel("附加图片")
 
                     TextField(
@@ -371,7 +371,7 @@ struct ChatView: View {
                     HStack(spacing: 6) {
                         ProgressView()
                             .controlSize(.mini)
-                        Text(bot?.busy == true ? "正在想办法…" : "正在发送…")
+                        Text(localized(bot?.busy == true ? "正在想办法…" : "正在发送…"))
                             .appFont(size: 11.5, weight: .medium)
                     }
                     .foregroundStyle(.secondary)
@@ -419,7 +419,7 @@ struct ChatView: View {
             RemoteImage(path: attachment.path)
                 .frame(width: 30, height: 30)
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-            Text(attachment.name ?? "图片")
+            Text(attachment.name ?? localized("图片"))
                 .appFont(size: 11.5)
                 .lineLimit(1)
                 .foregroundStyle(.secondary)
@@ -468,7 +468,7 @@ struct AttachmentPreview: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(attachment.name ?? "图片")
+                Text(attachment.name ?? localized("图片"))
                     .appFont(size: 13, weight: .medium)
                 Spacer()
                 Button("关闭") { dismiss() }

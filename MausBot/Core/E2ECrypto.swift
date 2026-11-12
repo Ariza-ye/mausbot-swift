@@ -5,13 +5,13 @@ enum E2EError: LocalizedError {
     case invalidDescriptor, updateRequired, verification, framing, disconnected, removed, timeout
     var errorDescription: String? {
         switch self {
-        case .invalidDescriptor: return "配对链接里的加密连接信息无效，请从电脑重新复制链接。"
-        case .updateRequired: return "此电脑要求更新版的加密协议，请更新客户端。"
-        case .verification: return "无法验证电脑身份，连接已停止。请在电脑设置中重新配对。"
-        case .framing: return "加密连接数据无效，连接已关闭。"
-        case .disconnected: return "加密连接已断开。"
-        case .removed: return "本设备已被远程电脑移除，请重新配对。"
-        case .timeout: return "加密连接超时，请确认远程电脑在线。"
+        case .invalidDescriptor: return localized("配对链接里的加密连接信息无效，请从电脑重新复制链接。")
+        case .updateRequired: return localized("此电脑要求更新版的加密协议，请更新客户端。")
+        case .verification: return localized("无法验证电脑身份，连接已停止。请在电脑设置中重新配对。")
+        case .framing: return localized("加密连接数据无效，连接已关闭。")
+        case .disconnected: return localized("加密连接已断开。")
+        case .removed: return localized("本设备已被远程电脑移除，请重新配对。")
+        case .timeout: return localized("加密连接超时，请确认远程电脑在线。")
         }
     }
 }

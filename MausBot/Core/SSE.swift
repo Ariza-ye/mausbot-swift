@@ -23,7 +23,7 @@ extension ApiClient {
                 defer { helloDeadline.cancel() }
                 do {
                     guard let url = URL(string: base + "/api/events") else {
-                        throw APIError(status: 0, message: "事件流地址无效", body: nil)
+                        throw APIError(status: 0, message: localized("事件流地址无效"), body: nil)
                     }
                     var request = URLRequest(url: url)
                     request.timeoutInterval = 90
@@ -36,7 +36,7 @@ extension ApiClient {
                     let prepared = try await self.prepare(request)
                     let (bytes, response) = try await ApiClient.streamSession.bytes(for: prepared)
                     guard let http = response as? HTTPURLResponse else {
-                        throw APIError(status: 0, message: "事件流没有响应", body: nil)
+                        throw APIError(status: 0, message: localized("事件流没有响应"), body: nil)
                     }
                     guard (200..<300).contains(http.statusCode) else {
                         var data = Data()
@@ -45,7 +45,7 @@ extension ApiClient {
                             if data.count > 4096 { break }
                         }
                         let text = String(data: data, encoding: .utf8)
-                        let message = jsonObject(data)?.nonEmpty("error") ?? text ?? "事件流被拒绝（HTTP \(http.statusCode)）"
+                        let message = jsonObject(data)?.nonEmpty("error") ?? text ?? localized("事件流被拒绝（HTTP %lld）", Int64(http.statusCode))
                         throw APIError(status: http.statusCode, message: message, body: text)
                     }
 
@@ -106,5 +106,5 @@ extension ApiClient {
 /// Raised when a stream answered but ended before its `hello` frame: a captive
 /// page or proxy must not look like a healthy computer forever.
 struct MissingStreamHello: Error, LocalizedError {
-    var errorDescription: String? { "电脑接受了连接，但没有开始会话。" }
+    var errorDescription: String? { localized("电脑接受了连接，但没有开始会话。") }
 }

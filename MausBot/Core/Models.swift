@@ -86,11 +86,11 @@ struct Bot: Identifiable, Equatable, Sendable {
     }
 
     var subtitle: String {
-        if busy { return "正在工作" }
+        if busy { return localized("正在工作") }
         switch activity {
-        case "waiting-on-you": return "等待你处理"
-        case "parked.computer": return "已暂停"
-        case "dead", "no-signal": return "无信号"
+        case "waiting-on-you": return localized("等待你处理")
+        case "parked.computer": return localized("已暂停")
+        case "dead", "no-signal": return localized("无信号")
         default: return title.isEmpty ? description : title
         }
     }
@@ -133,13 +133,13 @@ struct ChatGroup: Identifiable, Equatable, Sendable {
 
     var subtitle: String {
         if !description.isEmpty { return description }
-        return "\(memberIds.count) 个 Bot"
+        return localized("%lld 个 Bot", Int64(memberIds.count))
     }
 
     init?(json: JSON) {
         guard let id = json.nonEmpty("id") else { return nil }
         self.id = id
-        name = json.str("name") ?? "房间"
+        name = json.str("name") ?? localized("房间")
         description = json.str("description") ?? ""
         unread = json.bool("unread")
         threadId = json.str("threadId") ?? ""

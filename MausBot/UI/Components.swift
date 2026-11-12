@@ -90,7 +90,7 @@ struct RemoteImage: View {
             let data = try await store.imageData(path: path)
             try Task.checkCancellation()
             guard let decoded = NSImage(data: data) else {
-                loadError = "无法识别图片格式"
+                loadError = localized("无法识别图片格式")
                 return
             }
             image = decoded
@@ -165,12 +165,12 @@ struct ConnectionPill: View {
 
     private var label: String {
         switch state.phase {
-        case .online: return "已连接"
-        case .connecting: return "连接中"
-        case .offline: return "重连中"
-        case .error: return "出错"
-        case .unauthorized: return "需重新配对"
-        case .idle: return "未连接"
+        case .online: return localized("已连接")
+        case .connecting: return localized("连接中")
+        case .offline: return localized("重连中")
+        case .error: return localized("出错")
+        case .unauthorized: return localized("需重新配对")
+        case .idle: return localized("未连接")
         }
     }
 
@@ -238,7 +238,7 @@ struct SectionLabel: View {
     let text: String
 
     var body: some View {
-        Text(text)
+        Text(localized(text))
             .appFont(size: 10.5, weight: .semibold)
             .tracking(0.6)
             .foregroundStyle(.tertiary)
@@ -313,10 +313,11 @@ struct IconAction: View {
 
 func relativeTime(_ date: Date) -> String {
     let seconds = Date().timeIntervalSince(date)
-    if seconds < 60 { return "刚刚" }
-    if seconds < 3_600 { return "\(Int(seconds / 60)) 分钟前" }
-    if seconds < 86_400 { return "\(Int(seconds / 3_600)) 小时前" }
+    if seconds < 60 { return localized("刚刚") }
+    if seconds < 3_600 { return localized("%lld 分钟前", Int64(seconds / 60)) }
+    if seconds < 86_400 { return localized("%lld 小时前", Int64(seconds / 3_600)) }
     let formatter = DateFormatter()
-    formatter.dateFormat = Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year) ? "M月d日" : "yyyy年M月d日"
+    formatter.locale = AppLanguage.current.locale
+    formatter.setLocalizedDateFormatFromTemplate(Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year) ? "MMMd" : "yMMMd")
     return formatter.string(from: date)
 }

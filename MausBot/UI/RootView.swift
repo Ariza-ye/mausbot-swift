@@ -184,7 +184,7 @@ struct ComputerEditSheet: View {
                 }
 
                 Section("已保存的连接方式") {
-                    LabeledContent("通信方式", value: saved.e2e == nil ? "HTTP / HTTPS" : "端到端加密")
+                    LabeledContent("通信方式", value: saved.e2e == nil ? "HTTP / HTTPS" : localized("端到端加密"))
                     ForEach(saved.routes) { route in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
@@ -229,7 +229,7 @@ struct ComputerEditSheet: View {
                         try store.renameComputer(computer.id, localName: localName)
                         dismiss()
                     } catch {
-                        saveError = "保存失败：\(error.localizedDescription)"
+                        saveError = localized("保存失败：%@", error.localizedDescription)
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -241,10 +241,10 @@ struct ComputerEditSheet: View {
 
     private func routeName(_ kind: EndpointKind) -> String {
         switch kind {
-        case .lan: return "局域网直连"
-        case .tailnet: return "Tailscale 直连"
-        case .bonjour: return "Bonjour 本地发现"
-        case .hosted: return "公网地址"
+        case .lan: return localized("局域网直连")
+        case .tailnet: return localized("Tailscale 直连")
+        case .bonjour: return localized("Bonjour 本地发现")
+        case .hosted: return localized("公网地址")
         }
     }
 }
@@ -252,6 +252,7 @@ struct ComputerEditSheet: View {
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage(AppFont.preferenceKey) private var fontFamily = ""
+    @AppStorage(AppLanguage.preferenceKey) private var language = AppLanguage.chinese.rawValue
     @State private var fontFamilies = AppFont.availableFamilies
     @State private var showPairing = false
     @State private var forgetId: String?
@@ -292,6 +293,14 @@ struct SettingsView: View {
 
     private var general: some View {
         Form {
+            Section("语言") {
+                Picker("语言", selection: $language) {
+                    ForEach(AppLanguage.allCases) { item in
+                        Text(verbatim: item.label).tag(item.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
             Section("外观") {
                 Picker("主题", selection: $store.appearance) {
                     ForEach(AppAppearance.allCases) { item in
@@ -318,7 +327,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 Toggle("Bot 回复时显示通知", isOn: $store.notificationBanners)
             }
-            Section("连接") {
+            Section("连接状态") {
                 HStack {
                     ConnectionPill(state: store.connection)
                     Spacer()

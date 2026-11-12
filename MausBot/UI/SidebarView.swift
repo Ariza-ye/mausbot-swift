@@ -147,7 +147,7 @@ struct SidebarView: View {
                                         UnreadDot()
                                     }
                                 }
-                                Text(bot.title.isEmpty ? "管理员" : bot.title)
+                                Text(bot.title.isEmpty ? localized("管理员") : bot.title)
                                     .appFont(size: 10)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -161,7 +161,7 @@ struct SidebarView: View {
                     .buttonStyle(.plain)
                     .contextMenu {
                         Button("设置…") { store.settingsBotId = bot.id }
-                        Button(bot.notifications ? "关闭通知" : "开启通知") {
+                        Button(localized(bot.notifications ? "关闭通知" : "开启通知")) {
                             store.patchBot(botId: bot.id, fields: ["notifications": !bot.notifications])
                         }
                     }
@@ -252,10 +252,10 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button("设置…") { store.settingsBotId = bot.id }
-            Button(bot.pinned ? "取消置顶" : "置顶") {
+            Button(localized(bot.pinned ? "取消置顶" : "置顶")) {
                 store.patchBot(botId: bot.id, fields: ["pinned": !bot.pinned])
             }
-            Button(bot.notifications ? "关闭通知" : "开启通知") {
+            Button(localized(bot.notifications ? "关闭通知" : "开启通知")) {
                 store.patchBot(botId: bot.id, fields: ["notifications": !bot.notifications])
             }
         }
@@ -345,7 +345,7 @@ struct SidebarView: View {
     }
 
     private func emptyNote(_ text: String) -> some View {
-        Text(text)
+        Text(localized(text))
             .appFont(size: 12)
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 12)

@@ -66,7 +66,7 @@ struct PairingView: View {
                 .appFont(size: 12, weight: .medium)
                 .foregroundStyle(Theme.accentBright)
                 .frame(width: 16)
-            Text(text)
+            Text(localized(text))
                 .appFont(size: 12.5)
                 .foregroundStyle(.white.opacity(0.72))
         }
@@ -99,7 +99,7 @@ private struct PairingForm: View {
     private enum Mode: String, CaseIterable, Identifiable {
         case link, code
         var id: String { rawValue }
-        var label: String { self == .link ? "配对链接" : "地址和配对码" }
+        var label: String { localized(self == .link ? "配对链接" : "地址和配对码") }
     }
 
     private enum Field { case link, address, code }
@@ -307,10 +307,10 @@ private struct PairingForm: View {
 
     private func probeLabel(_ state: RouteProbe.State) -> String {
         switch state {
-        case .waiting: return "等待"
-        case .connecting: return "连接中"
-        case .ok: return "可用"
-        case .failed: return "失败"
+        case .waiting: return localized("等待")
+        case .connecting: return localized("连接中")
+        case .ok: return localized("可用")
+        case .failed: return localized("失败")
         }
     }
 
@@ -320,7 +320,7 @@ private struct PairingForm: View {
                 if busy {
                     ProgressView().controlSize(.small)
                 }
-                Text(busy ? "正在配对…" : "配对这台电脑")
+                Text(localized(busy ? "正在配对…" : "配对这台电脑"))
                     .appFont(size: 13, weight: .semibold)
             }
             .frame(maxWidth: .infinity)
@@ -384,43 +384,9 @@ struct MascotMark: View {
     var size: CGFloat = 100
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color.white.opacity(0.06))
-                .frame(width: size * 1.32, height: size * 1.32)
-            // ears
-            Circle()
-                .fill(Color.white.opacity(0.92))
-                .frame(width: size * 0.30, height: size * 0.30)
-                .offset(x: -size * 0.31, y: -size * 0.27)
-            Circle()
-                .fill(Color.white.opacity(0.92))
-                .frame(width: size * 0.30, height: size * 0.30)
-                .offset(x: size * 0.31, y: -size * 0.27)
-            // head
-            RoundedRectangle(cornerRadius: size * 0.30, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white, Color(red: 0.83, green: 0.97, blue: 0.86)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: size * 0.78, height: size * 0.66)
-            HStack(spacing: size * 0.14) {
-                Capsule().fill(Color(red: 0.05, green: 0.20, blue: 0.11)).frame(width: size * 0.08, height: size * 0.13)
-                Capsule().fill(Color(red: 0.05, green: 0.20, blue: 0.11)).frame(width: size * 0.08, height: size * 0.13)
-            }
-            // antenna
-            Capsule()
-                .fill(Color.white.opacity(0.8))
-                .frame(width: size * 0.03, height: size * 0.16)
-                .offset(y: -size * 0.40)
-            Circle()
-                .fill(Theme.accentBright)
-                .frame(width: size * 0.10, height: size * 0.10)
-                .offset(y: -size * 0.50)
-        }
-        .frame(width: size * 1.4, height: size * 1.4)
+        Image(nsImage: NSApplication.shared.applicationIconImage)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size * 1.4, height: size * 1.4)
     }
 }

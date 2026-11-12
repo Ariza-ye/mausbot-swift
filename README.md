@@ -1,53 +1,64 @@
 # MausBot for macOS
 
-OpenMausBot 的 macOS 原生客户端（SwiftUI）。它连接另一台电脑上运行的
-OpenMausBot 桌面端，把这台 Mac 当作配对设备：对话、审批卡片、房间、
-模型切换、任务和通知都在这里完成；智脑、工具、文件和凭证始终留在远程电脑上。
+English | [简体中文](README_zh.md)
 
-需求见 [SPEC.md](SPEC.md)。协议以
-[companion-protocol.md](https://github.com/johnson020202/OpenMausBot/blob/android/native-companion-client/apps/android/docs/companion-protocol.md)
-为准，界面按原生 macOS 重做，不复用桌面端 harness。
+MausBot is a native macOS client for OpenMausBot, built with SwiftUI. It connects
+to the OpenMausBot desktop app running on another computer and pairs this Mac as a
+device. Conversations, approval cards, rooms, model selection, tasks, and
+notifications are available here; intelligence, tools, files, and credentials
+remain on the remote computer.
 
-## 功能
+See [SPEC.md](SPEC.md) for the requirements. The
+[companion protocol](https://github.com/johnson020202/OpenMausBot/blob/android/native-companion-client/apps/android/docs/companion-protocol.md)
+is the protocol reference. The interface is built natively for macOS and does not
+reuse the desktop harness.
 
-- **多台电脑**：通过配对链接或地址与配对码连接，切换电脑、设置本机备注、查看连接地址、重新连接与忘记设备。
-- **对话与房间**：Bot 列表、房间、任务（对话）切换、新建对话、历史分页、未读标记和全局搜索。
-- **聊天**：流式回复、Markdown、图片上传与预览、附件保存、对话导出、停止本轮和删除队列消息。房间目前只发送文字。
-- **活动消息**：连续的工具活动合并为可展开的分组，显示摘要、执行状态和失败数量。
-- **审批与提问**：允许、拒绝、始终允许，以及选项和自由文本回答。
-- **Bot 管理**：新建、改名、置顶、隐藏、通知开关、模型切换与本机自定义 Emoji 图标。
-- **原生体验**：macOS 通知、跟随系统 / 浅色 / 深色主题，以及键盘发送快捷键。
-- **连接恢复**：SSE 断线退避重连、按电脑保存事件游标、流式帧合并；服务端无法续传时重新拉取数据。
-- **加密传输**：官方 E2E v1、Wi-Fi / Tailscale WebSocket 直连与 Relay，支持旧配对记录升级。
+## Features
 
-暂不支持语音、浏览器/电脑画面串流、例程编辑和云端账号，相关入口未开放。
+- **Multiple computers:** Pair using a link or an address and pairing code, switch computers, set local names, inspect connection addresses, reconnect, and forget devices.
+- **Conversations and rooms:** Browse Bots and rooms, switch tasks (conversations), create conversations, load older messages, mark messages as read, and search globally.
+- **Chat:** Stream replies, render Markdown, upload and preview images, save attachments, export conversations, stop replies, and delete queued messages. Rooms currently support text messages only.
+- **Activity messages:** Consecutive tool activities are grouped into expandable sections with summaries, execution status, and failure counts.
+- **Approvals and questions:** Allow, deny, or always allow requests, and answer using options or free text.
+- **Bot management:** Create, rename, pin, hide, and configure notifications and models for Bots; set custom Emoji icons locally.
+- **Native experience:** macOS notifications, system/light/dark themes, and keyboard shortcuts for sending messages.
+- **Connection recovery:** Reconnect SSE streams with backoff, save event cursors per computer, merge streaming frames, and reload data when the server cannot resume a stream.
+- **Encrypted transport:** Official E2E v1, direct Wi-Fi / Tailscale WebSocket connections, and Relay, with upgrades for existing pairings.
 
-## 构建与运行
+Voice, browser or computer screen streaming, routine editing, and cloud accounts
+are not currently supported; their controls are not exposed.
 
-需要 macOS 15+ 与 Xcode 16+。
+## Build and run
+
+Requires macOS 15+ and Xcode 16+.
 
 ```bash
 xcodebuild -project MausBot.xcodeproj -scheme MausBot -configuration Debug -derivedDataPath build build
 open build/Build/Products/Debug/MausBot.app
 ```
 
-或者直接用 Xcode 打开 `MausBot.xcodeproj` 运行。App 是沙盒化的，只申请
-网络连接、仅绑定回环地址的加密通道监听，以及用户选择文件的读写（保存附件与导出对话）。
+Alternatively, open `MausBot.xcodeproj` in Xcode and run the app. The app is
+sandboxed and requests network access, a loopback-only listener for encrypted
+connections, and read/write access to files selected by the user (for saving
+attachments and exporting conversations).
 
-## 打包 DMG
+## Package a DMG
 
 ```bash
 mkdir -p build-release
 ./scripts/package-dmg.sh
-# → dist/MausBot-<版本>.dmg（universal：arm64 + x86_64）
+# → dist/MausBot-<version>.dmg (universal: arm64 + x86_64)
 ```
 
-首次打包先创建 `build-release`，脚本会把构建日志写入该目录。
-脚本构建 universal Release，验证签名并输出架构，做一次可写挂载给卷设置图标，
-再压缩成 UDZO 镜像并校验。打开 DMG 后，将 `MausBot.app` 拖到 `Applications` 安装。
+Create `build-release` before the first package build; the script writes its
+build log there. It builds a universal Release, verifies the signature, reports
+the architectures, mounts the image read-write to set its volume icon, then
+compresses it to UDZO and verifies it. Open the DMG and drag `MausBot.app` to
+`Applications` to install.
 
-工程默认使用 ad-hoc 签名（`Sign to Run Locally`）。面向其他用户分发时，
-应使用 Developer ID 签名并完成公证；脚本只负责签名，不会自动公证。例如：
+The project uses ad-hoc signing (`Sign to Run Locally`) by default. To distribute
+to other users, sign with a Developer ID and notarize the app. The script handles
+signing but does not notarize automatically. For example:
 
 ```bash
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/package-dmg.sh
@@ -55,77 +66,99 @@ xcrun notarytool submit dist/MausBot-0.1.1.dmg --keychain-profile <profile> --wa
 xcrun stapler staple dist/MausBot-0.1.1.dmg
 ```
 
-## 配对
+## Pairing
 
-配对码只能由**远程电脑**上的 OpenMausBot 生成（桌面端 → 设置 → 远程访问）。
-这个客户端不生成配对码。
+Pairing codes can only be generated by OpenMausBot on the **remote computer**
+(desktop app → Settings → Remote Access). This client does not generate codes.
 
-两种入口，任一都可以：
+Choose either method:
 
-1. **配对链接**：粘贴 `openmausbot://pair?address=…&port=…&token=…`，也支持
-   从链接直接打开 App（`CFBundleURLTypes` 已注册 `openmausbot` scheme）。
-   链接里的 `endpoints`（base64url 的 JSON）会按 `priority` 依次探测；
-   带有 `https` 的 hosted 路由优先，且绝不会回退到明文地址。
-2. **地址 + 6 位配对码**：手动输入 `192.168.1.8:8787`。不写端口时会依次
-   尝试 `8787` 和 `8810`。
+1. **Pairing link:** Paste `openmausbot://pair?address=…&port=…&token=…`, or open
+   the link directly in the app (the `openmausbot` scheme is registered in
+   `CFBundleURLTypes`). The link's `endpoints` (base64url-encoded JSON) are
+   probed in `priority` order. HTTPS hosted routes take precedence and never
+   fall back to plaintext addresses.
+2. **Address + 6-digit pairing code:** Enter an address such as
+   `192.168.1.8:8787`. If no port is provided, the client tries `8787` and then
+   `8810`.
 
-配对成功后设备令牌写入登录钥匙串（service `com.openmausbot.mac.device-token`），
-电脑列表保存在 App 沙盒的 `Application Support/MausBot/computers.json`，
-SSE 游标按电脑分别保存，断线后带 `Last-Event-ID` 续传。
+After pairing, the device token is stored in the login Keychain (service
+`com.openmausbot.mac.device-token`). The computer list is stored in the app
+sandbox at `Application Support/MausBot/computers.json`. SSE cursors are saved
+per computer and sent as `Last-Event-ID` when reconnecting.
 
-### 加密连接与旧配对升级
+### Encrypted connections and upgrading existing pairings
 
-最新版官方桌面端通过真实加密会话写入设备的 `e2eAt`，而不是根据版本号判断。
-0.1.0 只有旧 HTTP 协议，会在旧公网通道退役后被标为旧客户端。
+The latest official desktop app records a device's `e2eAt` after an actual
+encrypted session rather than relying on the client version. Version 0.1.0 only
+supports the legacy HTTP protocol and will be marked as an old client after the
+legacy public channel is retired.
 
-从 0.1.1 起支持官方 E2E v1：CryptoKit 的 P-256 / AES-GCM / SHA-256 Noise 握手、
-yamux 多路复用、Wi-Fi/Tailscale WebSocket 直连、Relay admission 与加密连接。
-配对链接里的 `e2e` 身份公钥会固定保存；一旦固定，只使用加密连接，绝不退回
-HTTP 或旧 hosted 通道。消息、SSE、上传和下载共用相同的传输。
+Version 0.1.1 and later support official E2E v1: CryptoKit P-256 / AES-GCM /
+SHA-256 Noise handshakes, yamux multiplexing, direct Wi-Fi/Tailscale WebSocket
+connections, Relay admission, and encrypted connections. The `e2e` identity
+public key in the pairing link is pinned. Once pinned, only encrypted
+connections are used; the client never falls back to HTTP or the legacy hosted
+channel. Messages, SSE, uploads, and downloads share the same transport.
 
-旧配对记录会通过已信任的 `/api/companion/endpoints` 获取公钥并升级；如果设备
-令牌已撤销或电脑拒绝旧协议，请在电脑上生成新的完整配对链接，然后在此 App
-重新配对。这个升级不会靠修改 User-Agent、伪造设备标记或关闭服务端检查实现。
+Existing pairings are upgraded by fetching the public key from the trusted
+`/api/companion/endpoints` endpoint. If the device token has been revoked or the
+computer rejects the legacy protocol, generate a new complete pairing link on the
+computer and pair again in this app. The upgrade does not modify the User-Agent,
+forge device markers, or disable server checks.
 
-加密连接的回环代理只绑定 `127.0.0.1` 随机端口，并要求每次启动生成的 32 字节
-秘密请求头；未授权本地连接在创建加密流前被拒绝。
+The encrypted connection's loopback proxy binds only to `127.0.0.1` on a random
+port and requires a secret 32-byte request header generated at each launch.
+Unauthorized local connections are rejected before an encrypted stream is
+created.
 
-## 使用
+## Usage
 
-### 对话与 Bot 设置
+### Conversations and Bot settings
 
-在左侧选择 Bot 或房间；Bot 顶部的对话菜单可切换任务或新建对话，模型菜单可
-切换当前对话的模型。聊天菜单提供标记已读和导出对话。
+Select a Bot or room on the left. Use the conversation menu at the top of a Bot
+chat to switch tasks or start a new conversation, and the model menu to change
+the current conversation's model. The chat menu offers Mark as Read and Export
+Conversation.
 
-输入框中按 `Enter` 发送、`Shift + Enter` 换行，也支持 `⌘ + Enter` 发送。
-Bot 对话可通过回形针上传一张图片；房间当前只支持文字发送。
-连续的工具活动会折叠到“活动”分组，展开后查看各项执行结果。
+Press `Enter` to send, `Shift + Enter` for a new line, or `⌘ + Enter` to send.
+Use the paperclip to upload one image in a Bot conversation; rooms currently
+support text messages only. Consecutive tool activities are collapsed into an
+Activity group, which can be expanded to inspect each result.
 
-从侧栏右键菜单或聊天菜单打开“Bot 设置”，可以修改名称、置顶、隐藏、通知、默认模型与思考强度。
-思考强度选项取决于远程电脑报告的模型能力；选择“默认”使用引擎默认设置。
-点击头像旁的“更换图标…”可按分类浏览、搜索或粘贴单个 Emoji，支持肤色和组合表情，
-也可以恢复默认头像。图标按电脑和 Bot 分别保存在本机，不会修改远程 Bot 的配置。
+Open Bot Settings from the sidebar context menu or the chat menu to change the
+name, pinning, visibility, notifications, default model, and thinking effort.
+Thinking effort options depend on the model capabilities reported by the remote
+computer; choose Default to use the engine's default. Select Change Icon next to
+the avatar to browse by category, search, or paste a single Emoji, including skin
+tones and combined Emoji. You can also restore the default avatar. Icons are
+stored locally per computer and Bot and do not change the remote Bot's
+configuration.
 
-### 电脑管理与偏好设置
+### Computer management and preferences
 
-左上角菜单可切换已配对的电脑；按 `⌘ + Shift + N` 可配对新电脑。
-在 App 设置中可以切换主题、控制回复通知、连接或断开电脑，并管理已配对列表。
+Use the upper-left menu to switch paired computers, or press `⌘ + Shift + N` to
+pair a new one. App settings let you switch between English and Simplified
+Chinese, change the theme, control reply notifications, connect or disconnect,
+and manage paired computers. The language selection is stored locally and takes
+effect immediately.
 
-电脑的“编辑”入口可设置本机备注，查看连接地址、上次使用的地址和 Relay 信息。
-备注留空时使用远程电脑名称。“忘记”会删除本机记录与钥匙串凭证；远程设备撤销
-仍需在那台电脑上的 OpenMausBot 中操作。
+Use Edit on a computer to set a local name and inspect connection addresses, the
+last-used address, and Relay information. Leave the local name blank to use the
+remote name. Forget removes the local record and Keychain credentials; revoking
+the remote device must still be done in OpenMausBot on that computer.
 
-## 自检
+## Self-checks
 
-`SelfCheck` 以命令行方式跑在构建产物内部，不打开窗口：
+`SelfCheck` runs from the built app on the command line without opening a window:
 
 ```bash
 APP=build/Build/Products/Debug/MausBot.app/Contents/MacOS/MausBot
-"$APP" --selfcheck protocol          # 解析、路由、卡片、活动分组、Emoji、帧合并、钥匙串
-"$APP" --selfcheck e2e               # 官方 E2E 测试向量
+"$APP" --selfcheck protocol          # parsing, routing, cards, activity groups, Emoji, frame merging, Keychain
+"$APP" --selfcheck e2e               # official E2E test vectors
 ```
 
-端到端检查用一个 mock 电脑（Python 3 标准库，无依赖）：
+End-to-end checks use a mock computer (Python 3 standard library, no dependencies):
 
 ```bash
 python3 tools/mock-companion.py --port 8799 &
@@ -133,84 +166,93 @@ python3 tools/mock-companion.py --port 8799 &
 "$APP" --selfcheck app --url http://127.0.0.1:8799 --credential 123456
 ```
 
-`all` 覆盖健康检查、配对、bot 列表、发送回读和事件流；`app` 走完整的
-`AppStore`：配对 → 连接 → 列表 → 发送 → 流式回复 → 审批卡回复 → 忘记电脑，
-结束时自动清理钥匙串和电脑列表。
+`all` covers health checks, pairing, the Bot list, sending and reading back
+messages, and the event stream. `app` exercises the full `AppStore` flow:
+pair → connect → list → send → streaming reply → approval card response → forget
+computer. The Keychain and computer list are cleaned up afterward.
 
-加密协议不是用旧 mock 验证：官方参考代码固定于
-`milind-soni/OpenMausBot@6f226f15def56c697626f2ed6dffac416510c79a`。
-`--selfcheck e2e` 校验官方 V1–V4 的密钥派生、两种握手和传输记录；测试向量
-位于 `MausBot/Resources/e2e-vectors.json`。
+The encrypted protocol is not verified using the legacy mock. The official
+reference is pinned to
+`milind-soni/OpenMausBot@6f226f15def56c697626f2ed6dffac416510c79a`.
+`--selfcheck e2e` checks the official V1–V4 key derivation, both handshakes, and
+transport records. Test vectors are in `MausBot/Resources/e2e-vectors.json`.
 
-完整互通检查需要 Node 24+ 与包含官方 `companion/src` 的源码目录：
+The full interoperability check requires Node 24+ and a source directory
+containing the official `companion/src`:
 
 ```bash
 python3 tools/check-e2e.py --reference /path/to/OpenMausBot --relay
 ```
 
-检查包含官方 interop server、3 MiB 双向传输与窗口更新、并发请求、SSE、回环
-访问控制；配对测试直接使用官方的 `DeviceRegistry`、`E2ERegistry` 和 proxy，
-只模拟 harness 的回复，并断言真实 `e2eAt` 已写入、旧 HTTP 已返回 426。
-同时覆盖旧配对记录自动升级和 Relay admission/ready/Noise 通信。
-`--relay` 使用 Debug 构建专用的本地 relay 入口，发布版没有该入口；不带该
-参数可对 Release 或 DMG 中的可执行文件运行检查（用 `--app` 指定）。
+The check covers the official interop server, 3 MiB bidirectional transfers and
+window updates, concurrent requests, SSE, and loopback access control. Pairing
+tests use the official `DeviceRegistry`, `E2ERegistry`, and proxy directly,
+mocking only harness responses, and assert that the real `e2eAt` is recorded and
+legacy HTTP returns 426. They also cover automatic upgrades of existing pairings
+and Relay admission/ready/Noise communication. `--relay` uses a local relay
+entry point available only in Debug builds. Without that flag, the check can run
+against a Release or DMG executable (specified with `--app`).
 
-界面截图可以在没有录屏权限的机器上离屏渲染（一次进程一张，避免 SwiftUI
-在渲染后收到状态更新而断言）：
+UI screenshots can be rendered offscreen without screen-recording permission
+(one per process, to avoid SwiftUI assertions from state updates after rendering):
 
 ```bash
-"$APP" --render onboarding            # 首次配对
-"$APP" --render gallery               # 气泡、Markdown、审批卡、工具行
-"$APP" --render pairing               # 配对弹窗
-"$APP" --render settings              # App 设置与电脑列表
-"$APP" --render computer-edit         # 电脑备注与连接信息（示例数据）
-"$APP" --render emoji-picker          # Emoji 图标选择器
+"$APP" --render onboarding            # first-time pairing
+"$APP" --render gallery               # bubbles, Markdown, approval cards, tool rows
+"$APP" --render pairing               # pairing sheet
+"$APP" --render settings              # app settings and computer list
+"$APP" --render computer-edit         # local name and connection details (sample data)
+"$APP" --render emoji-picker          # Emoji icon picker
 "$APP" --render chat --url http://127.0.0.1:8799 --credential 123456
 "$APP" --render bot-settings --url http://127.0.0.1:8799 --credential 123456
 ```
 
-图片写到 App 容器内的 `tmp/mausbot-render/`。
-`chat` 和 `bot-settings` 需要已配对的电脑，以上命令使用前面的 mock 服务。
+Images are written to `tmp/mausbot-render/` inside the app container. `chat` and
+`bot-settings` require a paired computer; the commands above use the mock service.
 
-## 结构
+## Structure
 
 ```
 MausBot/
   Core/
-    ApiClient.swift        HTTP / 附件上传 / 配对
-    SSE.swift              事件流读取（自己拆空行，AsyncLineSequence 会丢空行）
-    E2ECrypto.swift        官方 E2E v1 密钥派生、身份校验、Noise 与传输记录
-    E2EConnection.swift    WebSocket / Relay / yamux / 受保护回环代理
-    AppStore.swift         单一状态机：连接、帧合并、乐观发送、动作
-    ComputerStore.swift    电脑列表、本机备注持久化与路由同意
-    PairingInvite.swift    链接/二维码/手动配对解析
-    CompanionEndpoint.swift 地址校验与回退策略
-    Keychain.swift         设备令牌
-    Models.swift           宽容解析的 wire 模型
-  UI/                      SwiftUI 界面、活动分组、Emoji 选择器与 Markdown 渲染
-  Resources/               AppIcon（复用官方图标）、AccentColor 与 E2E 测试向量
-  SelfCheck.swift          无窗口自检
-  E2ESelfCheck.swift       官方向量、传输互通及旧配对升级检查
-tools/mock-companion.py    端到端测试用的假电脑
-tools/check-e2e.py         官方 E2E 互通检查入口
-tools/e2e-companion-test.mjs 官方 companion 配对与 Relay 测试夹具
-scripts/package-dmg.sh     universal Release 构建与 DMG 打包
+    ApiClient.swift        HTTP / attachment uploads / pairing
+    SSE.swift              Event stream reader (splits blank lines itself; AsyncLineSequence drops them)
+    E2ECrypto.swift        Official E2E v1 key derivation, identity verification, Noise, and transport records
+    E2EConnection.swift    WebSocket / Relay / yamux / protected loopback proxy
+    AppStore.swift         Single state machine: connection, frame merging, optimistic sends, actions
+    ComputerStore.swift    Computer list, local names, and route consent persistence
+    PairingInvite.swift    Link / QR code / manual pairing parsing
+    CompanionEndpoint.swift Address validation and fallback policy
+    Keychain.swift         Device tokens
+    Models.swift           Tolerant wire-model parsing
+  UI/                      SwiftUI interface, activity groups, Emoji picker, and Markdown rendering
+  Resources/               AppIcon (reused from upstream), AccentColor, and E2E test vectors
+  SelfCheck.swift          Headless self-checks
+  E2ESelfCheck.swift       Official vectors, transport interoperability, and pairing upgrade checks
+tools/mock-companion.py    Mock computer for end-to-end tests
+tools/check-e2e.py         Official E2E interoperability check entry point
+tools/e2e-companion-test.mjs Official companion pairing and Relay test fixture
+scripts/package-dmg.sh     Universal Release build and DMG packaging
 ```
 
-## 安全边界
+## Security boundaries
 
-- `NSAllowsArbitraryLoads` 只是为了让局域网 `http://192.168.x.x` 能连；
-  对带有 E2E 公钥的电脑，令牌只在经过身份验证的加密通道里发送。
-- 明文路由（LAN/Bonjour）只在配对时显式同意过的地址上使用；一旦连上
-  hosted/tailnet，后续自动重连不会再降级回明文。
-- 忘记电脑会删除钥匙串令牌，但不会也无法在远程电脑上撤销设备；需要在
-  电脑的远程访问设置里撤销。
+- `NSAllowsArbitraryLoads` allows connections to LAN addresses such as
+  `http://192.168.x.x`. For computers with an E2E public key, tokens are sent
+  only through an authenticated encrypted channel.
+- Plaintext routes (LAN/Bonjour) are used only for addresses explicitly approved
+  during pairing. Once connected through hosted/tailnet, subsequent automatic
+  reconnections will not downgrade to plaintext.
+- Forgetting a computer deletes the Keychain token, but does not and cannot
+  revoke the device remotely. Revoke it in the computer's Remote Access settings.
 
-## 图标与许可
+## Icons and licensing
 
-App 图标（`MausBot/Resources/Assets.xcassets/AppIcon.appiconset`）直接复用
-OpenMausBot 官方仓库的 `build/icon.iconset`，版权归 OpenMausBot 作者，
-随上游以 Apache License 2.0 提供。
+The app icon (`MausBot/Resources/Assets.xcassets/AppIcon.appiconset`) is reused
+directly from `build/icon.iconset` in the official OpenMausBot repository. It is
+copyright the OpenMausBot authors and provided upstream under the Apache License
+2.0.
 
-E2E 测试向量同样来自上述固定的官方提交；许可和来源见 App 资源内的
-`OpenMausBot-LICENSE.txt` 与 `OpenMausBot-NOTICE.txt`。
+E2E test vectors also come from the pinned official commit above. See
+`OpenMausBot-LICENSE.txt` and `OpenMausBot-NOTICE.txt` in the app resources for
+licensing and attribution.

@@ -237,7 +237,7 @@ private struct ToolActivityGroup: View {
         var counts: [String: Int] = [:]
         for message in messages {
             guard let tool = message.tool else { continue }
-            let name = tool.name.isEmpty ? (tool.label ?? "工具") : tool.name
+            let name = tool.name.isEmpty ? (tool.label ?? localized("工具")) : tool.name
             if counts[name] == nil { names.append(name) }
             counts[name, default: 0] += 1
         }
@@ -281,7 +281,7 @@ private struct ToolActivityGroup: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("活动，\(messages.count) 次工具调用")
-            .accessibilityValue(expanded ? "已展开" : "已收起")
+            .accessibilityValue(localized(expanded ? "已展开" : "已收起"))
 
             if expanded {
                 ForEach(messages) { message in
@@ -392,19 +392,19 @@ struct CardView: View {
     }
 
     private var settledText: String {
-        if card.expired { return "已过期" }
-        if card.stopped { return "已停止" }
-        if card.dismissed { return "已忽略" }
-        if let text = card.answeredText, !text.isEmpty { return "已回复：\(text)" }
+        if card.expired { return localized("已过期") }
+        if card.stopped { return localized("已停止") }
+        if card.dismissed { return localized("已忽略") }
+        if let text = card.answeredText, !text.isEmpty { return localized("已回复：%@", text) }
         if let answered = card.answered, !answered.isEmpty {
             switch answered {
-            case "allow": return "已允许"
-            case "deny": return "已拒绝"
-            case "answer": return "已回答"
-            default: return "已处理：\(answered)"
+            case "allow": return localized("已允许")
+            case "deny": return localized("已拒绝")
+            case "answer": return localized("已回答")
+            default: return localized("已处理：%@", answered)
             }
         }
-        return "已处理"
+        return localized("已处理")
     }
 
     private func optionButton(_ option: String) -> some View {

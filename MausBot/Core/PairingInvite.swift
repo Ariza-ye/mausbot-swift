@@ -246,16 +246,16 @@ enum PairingError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidAddress:
-            return "电脑地址无效。填写 IP 或主机名，例如 192.168.1.8:8787。"
+            return localized("电脑地址无效。填写 IP 或主机名，例如 192.168.1.8:8787。")
         case .invalidCode:
-            return "配对码是电脑上显示的 6 位数字。"
+            return localized("配对码是电脑上显示的 6 位数字。")
         case .noRoute(let addresses):
-            let list = addresses.joined(separator: "、")
-            return "连不上这台电脑，请确认它已唤醒并打开 OpenMausBot，且与这台 Mac 在同一个网络。尝试过：\(list)"
+            let list = addresses.joined(separator: AppLanguage.current == .english ? ", " : "、")
+            return localized("连不上这台电脑，请确认它已唤醒并打开 OpenMausBot，且与这台 Mac 在同一个网络。尝试过：%@", list)
         case .rejected(let message):
             return message
         case .missingCredential:
-            return "这个配对链接没有配对码，请重新在电脑上生成。"
+            return localized("这个配对链接没有配对码，请重新在电脑上生成。")
         }
     }
 }

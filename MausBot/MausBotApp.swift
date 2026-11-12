@@ -17,11 +17,13 @@ enum Launcher {
 struct MausBotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = AppStore.shared
+    @AppStorage(AppLanguage.preferenceKey) private var language = AppLanguage.chinese.rawValue
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .environment(\.locale, AppLanguage(rawValue: language)?.locale ?? AppLanguage.chinese.locale)
                 .task {
                     Notifier.shared.bootstrap()
                     store.start()
@@ -33,7 +35,7 @@ struct MausBotApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .newItem) {
-                Button("配对新的电脑…") {
+                Button(localized("配对新的电脑…")) {
                     store.showPairingSheet = true
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -43,6 +45,7 @@ struct MausBotApp: App {
         Settings {
             SettingsView()
                 .environmentObject(store)
+                .environment(\.locale, AppLanguage(rawValue: language)?.locale ?? AppLanguage.chinese.locale)
         }
     }
 }
@@ -50,6 +53,10 @@ struct MausBotApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: url) {
+            NSApp.applicationIconImage = icon
+        }
         NSApp.appearance = AppStore.shared.appearance.nsAppearance
     }
 
