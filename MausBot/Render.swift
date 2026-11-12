@@ -28,6 +28,13 @@ enum Render {
             var content: AnyView
             var size = CGSize(width: 1120, height: 740)
             switch screen {
+            case "emoji-picker":
+                content = AnyView(
+                    BotEmojiPicker(selection: "🤖") { _ in }
+                        .background(Theme.windowBackground)
+                        .preferredColorScheme(store.appearance.colorScheme ?? .light)
+                )
+                size = CGSize(width: 404, height: 380)
             case "pairing":
                 content = AnyView(PairingView(onboarding: false).environmentObject(store))
                 size = CGSize(width: 520, height: 540)
@@ -110,7 +117,7 @@ enum Render {
             }
 
             let url = folder.appendingPathComponent("\(screen).png")
-            if screen == "computer-edit" {
+            if screen == "computer-edit" || screen == "emoji-picker" {
                 saveHosted(content, size: size, to: url)
             } else {
                 save(content, size: size, to: url)

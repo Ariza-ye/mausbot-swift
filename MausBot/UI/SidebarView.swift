@@ -129,7 +129,7 @@ struct SidebarView: View {
                     } label: {
                         HoverRow(selected: store.open?.target == .bot(bot.id)) {
                             VStack(spacing: 4) {
-                                AvatarView(name: bot.name, color: bot.color, url: bot.avatarUrl, size: 34)
+                                AvatarView(name: bot.name, color: bot.color, url: bot.avatarUrl, size: 34, emoji: store.emoji(for: bot.id))
                                     .overlay(alignment: .bottomTrailing) {
                                         Image(systemName: "star.fill")
                                             .font(.system(size: 10))
@@ -223,7 +223,7 @@ struct SidebarView: View {
         } label: {
             HoverRow(selected: selected) {
                 HStack(spacing: 10) {
-                    AvatarView(name: bot.name, color: bot.color, url: bot.avatarUrl, size: 30)
+                    AvatarView(name: bot.name, color: bot.color, url: bot.avatarUrl, size: 30, emoji: store.emoji(for: bot.id))
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 4) {
                             Text(bot.name)

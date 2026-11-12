@@ -46,6 +46,7 @@ struct ChatView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 if let bot {
                     modelMenu(bot)
+                        .padding(.leading, 8)
                     tasksMenu(bot)
                 }
                 if busy {
@@ -54,6 +55,7 @@ struct ChatView: View {
                     }
                 }
                 moreMenu
+                    .padding(.trailing, 8)
             }
         }
         .sheet(item: $preview) { attachment in

@@ -58,6 +58,9 @@ final class AppStore: ObservableObject {
     @Published var showPairingSheet = false
     @Published var showNewBotSheet = false
     @Published var settingsBotId: String?
+    @Published private var botEmojis: [String: [String: String]] = [:] {
+        didSet { UserDefaults.standard.set(botEmojis, forKey: Keys.botEmojis) }
+    }
     @Published var notificationBanners: Bool {
         didSet { UserDefaults.standard.set(notificationBanners, forKey: Keys.notifications) }
     }
@@ -68,6 +71,7 @@ final class AppStore: ObservableObject {
     private enum Keys {
         static let notifications = "notificationBanners"
         static let appearance = "appearance"
+        static let botEmojis = "botEmojis"
     }
 
     private let store = ComputerStore.shared
@@ -90,6 +94,26 @@ final class AppStore: ObservableObject {
         connection = initial
         notificationBanners = UserDefaults.standard.object(forKey: Keys.notifications) as? Bool ?? true
         appearance = AppAppearance(rawValue: UserDefaults.standard.string(forKey: Keys.appearance) ?? "") ?? .system
+        botEmojis = UserDefaults.standard.dictionary(forKey: Keys.botEmojis) as? [String: [String: String]] ?? [:]
+    }
+
+    func emoji(for botId: String) -> String? {
+        guard let computer else { return nil }
+        return botEmojis[computer.id]?[botId]
+    }
+
+    func setEmoji(_ emoji: String?, for botId: String) {
+        guard let computer else { return }
+        if let emoji, !Self.isValidEmoji(emoji) { return }
+        var icons = botEmojis[computer.id] ?? [:]
+        icons[botId] = emoji
+        botEmojis[computer.id] = icons.isEmpty ? nil : icons
+    }
+
+    static func isValidEmoji(_ value: String) -> Bool {
+        value.count == 1 && value.unicodeScalars.contains {
+            $0.properties.isEmoji && ($0.value > 0x7F || value.unicodeScalars.contains { $0.value == 0x20E3 })
+        }
     }
 
     // MARK: - Lifecycle

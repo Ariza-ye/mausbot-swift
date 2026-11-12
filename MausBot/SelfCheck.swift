@@ -48,6 +48,11 @@ enum SelfCheck {
         }
 
         if command == "protocol" || command == "all" {
+            check("avatar accepts emoji and variation selectors", AppStore.isValidEmoji("🤖") && AppStore.isValidEmoji("❤️"))
+            check("avatar accepts skin tones and joined emoji", AppStore.isValidEmoji("👩🏽‍💻") && AppStore.isValidEmoji("👨‍👩‍👧‍👦"))
+            check("avatar accepts flags and keycaps", AppStore.isValidEmoji("🇸🇬") && AppStore.isValidEmoji("1️⃣"))
+            check("avatar rejects text and plain digits", !AppStore.isValidEmoji("猫") && !AppStore.isValidEmoji("1"))
+            check("avatar rejects empty or multiple emoji", !AppStore.isValidEmoji("") && !AppStore.isValidEmoji("🤖🐱"))
             let endpoints = #"[{"url":"http://192.168.1.8:8787","kind":"lan","priority":1},{"url":"https://abc.tailnet.ts.net","kind":"hosted","priority":0}]"#
             let encoded = Data(endpoints.utf8).base64EncodedString()
                 .replacingOccurrences(of: "+", with: "-")

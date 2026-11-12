@@ -107,6 +107,7 @@ struct AvatarView: View {
     let color: String
     var url: String?
     var size: CGFloat = 34
+    var emoji: String?
 
     private var initial: String {
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -115,6 +116,17 @@ struct AvatarView: View {
     }
 
     var body: some View {
+        if let emoji {
+            Text(emoji)
+                .font(.system(size: size * 0.8))
+                .frame(width: size, height: size)
+                .accessibilityLabel("\(name)的图标：\(emoji)")
+        } else {
+            defaultAvatar
+        }
+    }
+
+    private var defaultAvatar: some View {
         ZStack {
             Circle()
                 .fill(
