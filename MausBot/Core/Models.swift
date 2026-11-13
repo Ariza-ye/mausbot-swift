@@ -87,6 +87,19 @@ struct WorkLocationConfig: Equatable {
     }
 }
 
+struct TokenUsage: Equatable, Sendable {
+    var input: Int
+    var output: Int
+    var cachedInput: Int?
+
+    init?(json: JSON?) {
+        guard let json, let input = json.int("input"), let output = json.int("output") else { return nil }
+        self.input = input
+        self.output = output
+        cachedInput = json.int("cachedInput")
+    }
+}
+
 struct BotTask: Identifiable, Equatable, Sendable {
     var threadId: String
     var title: String
@@ -100,6 +113,7 @@ struct BotTask: Identifiable, Equatable, Sendable {
     var modelSelection: ModelSelection?
     var surface: WorkLocation?
     var surfaceAuto: Bool
+    var usage: TokenUsage?
 
     var pinnedLocation: WorkLocation? { surfaceAuto ? nil : surface }
 
@@ -119,6 +133,7 @@ struct BotTask: Identifiable, Equatable, Sendable {
         modelSelection = ModelSelection(json: json.obj("modelSelection"))
         surface = WorkLocation.from(json.nonEmpty("surface"))
         surfaceAuto = json.bool("surfaceAuto")
+        usage = TokenUsage(json: json.obj("usage"))
     }
 }
 
@@ -203,6 +218,7 @@ struct ChatGroup: Identifiable, Equatable, Sendable {
     var unread: Bool
     var threadId: String
     var memberIds: [String]
+    var usage: TokenUsage?
 
     var subtitle: String {
         if !description.isEmpty { return description }
@@ -216,6 +232,7 @@ struct ChatGroup: Identifiable, Equatable, Sendable {
         description = json.str("description") ?? ""
         unread = json.bool("unread")
         threadId = json.str("threadId") ?? ""
+        usage = TokenUsage(json: json.obj("usage"))
         if !json.objArray("members").isEmpty {
             memberIds = json.objArray("members").compactMap { $0.nonEmpty("botId") ?? $0.nonEmpty("id") }
         } else {

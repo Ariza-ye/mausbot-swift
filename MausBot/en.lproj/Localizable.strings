@@ -1,4 +1,7 @@
 "语言" = "Language";
+"当前对话累计：输入 %@，输出 %@" = "Conversation total: %@ input, %@ output";
+"输入中含缓存 %@" = "Input includes %@ cached";
+"服务端尚未提供用量" = "The server has not provided usage";
 "自动" = "Auto";
 "云端桌面" = "Cloud desktop";
 "私有桌面" = "Private desktop";

@@ -291,6 +291,30 @@ struct ChatView: View {
 
     // MARK: - Composer
 
+    private var tokenUsageIndicator: some View {
+        let usage = bot?.task(threadId: chat.threadId)?.usage
+            ?? (group?.threadId == chat.threadId ? group?.usage : nil)
+        let locale = AppLanguage.current.locale
+        let total = usage.map { ($0.input + $0.output).formatted(.number.locale(locale)) } ?? "—"
+        let detail = usage.map {
+            var text = localized("当前对话累计：输入 %@，输出 %@",
+                                 $0.input.formatted(.number.locale(locale)), $0.output.formatted(.number.locale(locale)))
+            if let cached = $0.cachedInput {
+                text += "\n" + localized("输入中含缓存 %@", cached.formatted(.number.locale(locale)))
+            }
+            return text
+        } ?? localized("服务端尚未提供用量")
+        return Text(verbatim: "Token \(total)")
+            .appFont(size: 11.5, weight: .medium)
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Color.primary.opacity(0.06)))
+            .help(detail)
+            .accessibilityLabel(detail)
+    }
+
     private var composer: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
@@ -390,7 +414,11 @@ struct ChatView: View {
                 }
             }
             .padding(.horizontal, 20)
+            .padding(.top, 18)
             .padding(.vertical, 14)
+            .overlay(alignment: .topTrailing) {
+                tokenUsageIndicator.padding(.trailing, 32)
+            }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.image], allowsMultipleSelection: false) { result in
             guard case .success(let urls) = result, let url = urls.first else { return }
