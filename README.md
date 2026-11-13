@@ -4,16 +4,17 @@ English | [简体中文](README_zh.md)
 
 MausBot is a native macOS client for OpenMausBot, built with SwiftUI. It connects
 to the OpenMausBot desktop app running on another computer and pairs this Mac as a
-device. Conversations, approval cards, rooms, model selection, tasks, and
-notifications are available here; intelligence, tools, files, and credentials
-remain on the remote computer.
+device. Use it for conversations, approvals, rooms, model selection, and
+notifications; the remote OpenMausBot manages Bots and their tools.
 
-See [SPEC.md](SPEC.md) for the requirements. The
-[companion protocol](https://github.com/johnson020202/OpenMausBot/blob/android/native-companion-client/apps/android/docs/companion-protocol.md)
-is the protocol reference. The interface is built natively for macOS and does not
-reuse the desktop harness.
+The [companion protocol](https://github.com/johnson020202/OpenMausBot/blob/android/native-companion-client/apps/android/docs/companion-protocol.md)
+documents the API used as a reference. The interface is built natively for macOS
+and does not reuse the desktop harness.
 
 ## Opening the app for the first time
+
+Download the DMG from the [latest release](https://github.com/Ariza-ye/mausbot-swift/releases/latest),
+open it, and drag `MausBot.app` to Applications.
 
 The current release is not notarized by Apple. If macOS blocks it on first launch,
 open System Settings → Privacy & Security, find the MausBot message, and click
@@ -29,12 +30,14 @@ sudo xattr -r -d com.apple.quarantine /Applications/MausBot.app
 ## Features
 
 - **Multiple computers:** Pair using a link or an address and pairing code, switch computers, set local names, inspect connection addresses, reconnect, and forget devices.
-- **Conversations and rooms:** Browse Bots and rooms, switch tasks (conversations), create conversations, load older messages, mark messages as read, and search globally. Selecting a bot opens its most recently active conversation.
+- **Conversations and rooms:** Browse Bots and rooms, create rooms and conversations, switch tasks (conversations), load older messages, mark messages as read, and search globally. Selecting a bot opens its most recently active conversation.
+- **Sidebar organization:** Create sections, choose their Bots, and move Bots between sections.
 - **Chat:** Stream replies, choose a work location for each bot conversation, render Markdown, upload and preview images, save attachments, export conversations, stop replies, and delete queued messages. Rooms currently support text messages only.
 - **Activity messages:** Consecutive tool activities are grouped into expandable sections with summaries, execution status, and failure counts.
 - **Approvals and questions:** Allow, deny, or always allow requests, and answer using options or free text.
 - **Bot management:** Create and rename Bots, edit standing instructions, pin or hide them, configure notifications and models, and set custom Emoji icons locally.
-- **Native experience:** macOS notifications, system/light/dark themes, and keyboard shortcuts for sending messages.
+- **Native experience:** macOS notifications while the app is running, system/light/dark themes, a choice of installed fonts, and keyboard shortcuts for sending messages.
+- **Updates:** Check GitHub Releases manually or on a configurable schedule.
 - **Connection recovery:** Reconnect SSE streams with backoff, save event cursors per computer, merge streaming frames, and reload data when the server cannot resume a stream.
 - **Encrypted transport:** Official E2E v1, direct Wi-Fi / Tailscale WebSocket connections, and Relay, with upgrades for existing pairings.
 
@@ -75,9 +78,16 @@ signing but does not notarize automatically. For example:
 
 ```bash
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/package-dmg.sh
-xcrun notarytool submit dist/MausBot-0.1.1.dmg --keychain-profile <profile> --wait
-xcrun stapler staple dist/MausBot-0.1.1.dmg
+APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build-release/Build/Products/Release/MausBot.app/Contents/Info.plist)
+xcrun notarytool submit "dist/MausBot-$APP_VERSION.dmg" --keychain-profile "YOUR_PROFILE" --wait
+xcrun stapler staple "dist/MausBot-$APP_VERSION.dmg"
 ```
+
+Replace `YOUR_PROFILE` with your configured notarytool keychain profile.
+The optional `SIGN_IDENTITY` step re-signs the app without preserving its
+entitlements, so the resulting app no longer has the Xcode build's sandbox or
+its file and network entitlements. Configure signing accordingly before
+distributing a sandboxed build.
 
 Push a tag matching the app version (for example, `v0.1.1`) to build a universal
 DMG and create a GitHub Release. You can also run the release workflow manually
@@ -92,12 +102,15 @@ Choose either method:
 
 1. **Pairing link:** Paste `openmausbot://pair?address=…&port=…&token=…`, or open
    the link directly in the app (the `openmausbot` scheme is registered in
-   `CFBundleURLTypes`). The link's `endpoints` (base64url-encoded JSON) are
-   probed in `priority` order. HTTPS hosted routes take precedence and never
-   fall back to plaintext addresses.
+   `CFBundleURLTypes`). A link can advertise multiple prioritized `endpoints`.
+   Encrypted pairing tries direct routes first and can use Relay; legacy pairing
+   follows the advertised priority, with no plaintext fallback when the preferred
+   route is hosted or tailnet.
 2. **Address + 6-digit pairing code:** Enter an address such as
    `192.168.1.8:8787`. If no port is provided, the client tries `8787` and then
-   `8810`.
+   `8810`. A plain LAN address can send the pairing code and returned device token
+   over HTTP before an E2E key is pinned. A complete link containing `e2e`
+   authenticates and encrypts pairing from the start.
 
 After pairing, the device token is stored in the login Keychain (service
 `com.openmausbot.mac.device-token`). The computer list is stored in the app
@@ -138,32 +151,42 @@ chat to switch tasks or start a new conversation, and the model menu to change
 the current conversation's model. The chat menu offers Mark as Read and Export
 Conversation.
 
+Use the sidebar's `+` menu to create a Bot, add a section, or create a group room.
+A group requires at least one Bot. Use a regular Bot's context menu to move it
+to a section.
+
 Press `Enter` to send, `Shift + Enter` for a new line, or `⌘ + Enter` to send.
-Use the paperclip to upload one image in a Bot conversation; rooms currently
-support text messages only. The work location menu selects a cloud desktop,
-private desktop, paired computer, or browser for the current Bot conversation.
-Auto or Follow the bot's setting restores its default. The remote OpenMausBot
-saves the selection; "paired computer" means the computer running OpenMausBot.
-Wait for the conversation to finish before changing its location. Consecutive
-tool activities are collapsed into an Activity group, which can be expanded to
-inspect each result.
+Use the paperclip to upload one image of up to 20 MiB in a Bot conversation;
+rooms currently support text messages only. The work location menu selects a
+cloud desktop, private desktop, paired computer, or browser for the current Bot
+conversation, subject to the remote configuration and model capabilities. Auto
+or Follow the bot's setting restores its default. The remote OpenMausBot saves
+the selection; "paired computer" means the computer running OpenMausBot. Wait
+for the conversation to finish before changing its location. Consecutive tool
+activities are collapsed into an Activity group, which can be expanded to inspect
+each result.
 
 Open Bot Settings from the sidebar context menu or the chat menu to change the
-name, pinning, visibility, notifications, default model, and thinking effort.
-Thinking effort options depend on the model capabilities reported by the remote
-computer; choose Default to use the engine's default. Select Change Icon next to
-the avatar to browse by category, search, or paste a single Emoji, including skin
-tones and combined Emoji. You can also restore the default avatar. Icons are
-stored locally per computer and Bot and do not change the remote Bot's
-configuration.
+name, standing instructions, pinning, visibility, notifications, default model,
+and thinking effort. Standing instructions are sent with each message and are
+limited to 24,000 UTF-8 bytes. Thinking effort options depend on the model
+capabilities reported by the remote computer; choose Default to use the engine's
+default. Select Change Icon next to the avatar to browse by category, search, or
+paste a single Emoji, including skin tones and combined Emoji. You can also
+restore the default avatar. Icons are stored locally per computer and Bot and do
+not change the remote Bot's configuration.
 
 ### Computer management and preferences
 
 Use the upper-left menu to switch paired computers, or press `⌘ + Shift + N` to
 pair a new one. App settings let you switch between English and Simplified
-Chinese, change the theme, control reply notifications, connect or disconnect,
-and manage paired computers. The language selection is stored locally and takes
-effect immediately.
+Chinese, change the theme and font, control reply notifications, connect or
+disconnect, and manage paired computers. The language selection is stored
+locally and takes effect immediately. Notifications require the app to be running.
+
+In Settings → Updates, check for a new release manually or enable automatic
+checks every day, week, or 30 days. Automatic checks are enabled daily by default;
+the download link opens GitHub Releases and updates are installed manually.
 
 Use Edit on a computer to set a local name and inspect connection addresses, the
 last-used address, and Relay information. Leave the local name blank to use the
@@ -195,7 +218,7 @@ computer. The Keychain and computer list are cleaned up afterward.
 
 The encrypted protocol is not verified using the legacy mock. The official
 reference is pinned to
-`milind-soni/OpenMausBot@6f226f15def56c697626f2ed6dffac416510c79a`.
+[`milind-soni/OpenMausBot@6f226f1`](https://github.com/milind-soni/OpenMausBot/tree/6f226f15def56c697626f2ed6dffac416510c79a/companion/src/e2e).
 `--selfcheck e2e` checks the official V1–V4 key derivation, both handshakes, and
 transport records. Test vectors are in `MausBot/Resources/e2e-vectors.json`.
 
@@ -247,6 +270,7 @@ MausBot/
     CompanionEndpoint.swift Address validation and fallback policy
     Keychain.swift         Device tokens
     Models.swift           Tolerant wire-model parsing
+    UpdateChecker.swift    GitHub release checks and scheduling
   UI/                      SwiftUI interface, activity groups, Emoji picker, and Markdown rendering
   Resources/               AppIcon (reused from upstream), AccentColor, and E2E test vectors
   SelfCheck.swift          Headless self-checks
@@ -260,11 +284,11 @@ scripts/package-dmg.sh     Universal Release build and DMG packaging
 ## Security boundaries
 
 - `NSAllowsArbitraryLoads` allows connections to LAN addresses such as
-  `http://192.168.x.x`. For computers with an E2E public key, tokens are sent
-  only through an authenticated encrypted channel.
-- Plaintext routes (LAN/Bonjour) are used only for addresses explicitly approved
-  during pairing. Once connected through hosted/tailnet, subsequent automatic
-  reconnections will not downgrade to plaintext.
+  `http://192.168.x.x`. Once an E2E public key is pinned, the device token is
+  sent only through an authenticated encrypted channel.
+- Without an E2E key, plaintext routes (LAN/Bonjour) are used only for addresses
+  selected during pairing. Once connected through hosted/tailnet, subsequent
+  automatic reconnections will not downgrade to plaintext LAN/Bonjour.
 - Forgetting a computer deletes the Keychain token, but does not and cannot
   revoke the device remotely. Revoke it in the computer's Remote Access settings.
 
@@ -278,3 +302,6 @@ copyright the OpenMausBot authors and provided upstream under the Apache License
 E2E test vectors also come from the pinned official commit above. See
 `OpenMausBot-LICENSE.txt` and `OpenMausBot-NOTICE.txt` in the app resources for
 licensing and attribution.
+
+Model provider icons are from LobeHub and use the MIT License; see
+`MausBot/Resources/ProviderIcons-LICENSE.txt`.
