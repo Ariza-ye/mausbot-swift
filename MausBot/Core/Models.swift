@@ -31,6 +31,62 @@ struct ModelSelection: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+enum WorkLocation: String, CaseIterable, Sendable {
+    case auto, cloud, vm, local, browser, off, unknown
+
+    static let choices: [WorkLocation] = [.cloud, .vm, .local, .browser]
+
+    static func from(_ value: String?) -> WorkLocation? {
+        guard let value, !value.isEmpty else { return nil }
+        return WorkLocation(rawValue: value) ?? .unknown
+    }
+}
+
+struct WorkLocationConfig: Equatable {
+    var cloudConfigured: Bool?
+    var browserEnabled: Bool?
+    var browserAvailable: Bool?
+    var cloudHome: Bool
+    var policy: [String: Bool]
+
+    init(json: JSON) {
+        let box = json.obj("box")
+        cloudConfigured = box?.bool("included") == true ? true : box?["configured"] as? Bool
+        browserEnabled = json.obj("features")?["browser"] as? Bool
+        switch json.obj("browserEngine")?.str("kind") {
+        case "engine": browserAvailable = true
+        case "unavailable": browserAvailable = false
+        default: browserAvailable = nil
+        }
+        cloudHome = json.bool("cloudHome")
+        policy = json.obj("managedPolicy")?.obj("computers") as? [String: Bool] ?? [:]
+    }
+
+    func unavailableReason(for location: WorkLocation, bot: Bot, instance: ProviderInstance?) -> String? {
+        if cloudHome && (location == .vm || location == .local) {
+            return localized("此位置在远程服务中不可用")
+        }
+        let policyKey: String
+        switch location {
+        case .cloud: policyKey = bot.cloudBackend == "vps" ? "vps" : "box"
+        case .vm: policyKey = "localVm"
+        case .local: policyKey = "thisComputer"
+        default: policyKey = ""
+        }
+        if policy[policyKey] == false { return localized("此位置受到远程电脑策略限制") }
+        if location == .browser {
+            if instance?.browserMcp == false { return localized("当前模型不支持浏览器") }
+            if browserEnabled == false || browserAvailable == false { return localized("请先在配对电脑启用浏览器") }
+        } else {
+            if instance?.computerMcp == false { return localized("当前模型不支持桌面") }
+            if location == .cloud && bot.cloudBackend != "vps" && cloudConfigured == false {
+                return localized("请先在配对电脑连接 Boat")
+            }
+        }
+        return nil
+    }
+}
+
 struct BotTask: Identifiable, Equatable, Sendable {
     var threadId: String
     var title: String
@@ -42,6 +98,10 @@ struct BotTask: Identifiable, Equatable, Sendable {
     var createdAt: Date?
     var lastReadMessageId: String?
     var modelSelection: ModelSelection?
+    var surface: WorkLocation?
+    var surfaceAuto: Bool
+
+    var pinnedLocation: WorkLocation? { surfaceAuto ? nil : surface }
 
     var id: String { threadId }
 
@@ -57,6 +117,8 @@ struct BotTask: Identifiable, Equatable, Sendable {
         createdAt = wireDate(json.int("createdAt"))
         lastReadMessageId = json.nonEmpty("lastReadMessageId")
         modelSelection = ModelSelection(json: json.obj("modelSelection"))
+        surface = WorkLocation.from(json.nonEmpty("surface"))
+        surfaceAuto = json.bool("surfaceAuto")
     }
 }
 
@@ -65,6 +127,7 @@ struct Bot: Identifiable, Equatable, Sendable {
     var name: String
     var title: String
     var description: String
+    var soul: String
     var color: String
     var avatarUrl: String?
     var unread: Bool
@@ -76,13 +139,20 @@ struct Bot: Identifiable, Equatable, Sendable {
     var mainThreadId: String?
     var tasks: [BotTask]
     var modelSelection: ModelSelection?
+    var computer: WorkLocation?
+    var cloudBackend: String?
     var notifications: Bool
     var section: String?
     var chiefOfStaff: Bool
     var speakReplies: Bool
 
-    var activeTask: BotTask? {
-        tasks.first { $0.threadId == threadId } ?? tasks.first
+    var latestTask: BotTask? {
+        tasks.reduce(nil) { latest, task in
+            guard let latest else { return task }
+            let latestDate = latest.updatedAt ?? latest.createdAt ?? .distantPast
+            let taskDate = task.updatedAt ?? task.createdAt ?? .distantPast
+            return taskDate > latestDate ? task : latest
+        }
     }
 
     var subtitle: String {
@@ -105,6 +175,7 @@ struct Bot: Identifiable, Equatable, Sendable {
         name = json.str("name") ?? "Bot"
         title = json.str("title") ?? ""
         description = json.str("description") ?? ""
+        soul = json.str("soul") ?? ""
         color = json.str("color") ?? "green"
         avatarUrl = json.nonEmpty("avatarUrl")
         unread = json.bool("unread")
@@ -116,6 +187,8 @@ struct Bot: Identifiable, Equatable, Sendable {
         mainThreadId = json.nonEmpty("mainThreadId")
         tasks = json.objArray("tasks").compactMap(BotTask.init(json:))
         modelSelection = ModelSelection(json: json.obj("modelSelection"))
+        computer = WorkLocation.from(json.nonEmpty("computer"))
+        cloudBackend = json.nonEmpty("cloudBackend")
         notifications = json.bool("notifications", true)
         section = json.nonEmpty("section")
         chiefOfStaff = json.bool("chiefOfStaff")
@@ -343,7 +416,7 @@ struct Message: Identifiable, Equatable, Sendable {
             role: json.str("role") ?? "bot",
             kind: json.str("kind") ?? "text",
             text: json.str("text") ?? "",
-            createdAt: wireDate(json.int("createdAt")) ?? Date(),
+            createdAt: wireDate(json.int("at") ?? json.int("createdAt")) ?? Date(),
             card: Card(json: json.obj("card")),
             tool: ToolRow(json: json.obj("tool")),
             attachments: json.objArray("attachments").compactMap(Attachment.init(json:)),
@@ -380,6 +453,8 @@ struct ProviderInstance: Identifiable, Equatable, Sendable {
     var models: [InstanceModel]
     var effortLevels: [String]
     var modelVariants: Bool
+    var computerMcp: Bool?
+    var browserMcp: Bool?
 
     var id: String { instanceId }
     var name: String { displayName.isEmpty ? instanceId : displayName }
@@ -393,6 +468,8 @@ struct ProviderInstance: Identifiable, Equatable, Sendable {
         let capabilities = json.obj("capabilities")
         effortLevels = capabilities?.strArray("effortLevels") ?? []
         modelVariants = capabilities?.bool("modelVariants") ?? false
+        computerMcp = capabilities?["computerMcp"] as? Bool
+        browserMcp = capabilities?["browserMcp"] as? Bool
         let catalog = json.obj("models")
         models = (catalog?.objArray("options") ?? []).compactMap { option in
             guard let id = option.nonEmpty("id") else { return nil }
@@ -443,6 +520,7 @@ struct ThreadState: Equatable, Sendable {
     var messages: [Message] = []
     var hasMore = true
     var loading = false
+    var loaded = false
     var activeLeafId: String?
 }
 

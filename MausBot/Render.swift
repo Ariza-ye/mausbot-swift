@@ -118,7 +118,7 @@ enum Render {
 
             content = AnyView(content.environment(\.locale, AppLanguage.current.locale))
             let url = folder.appendingPathComponent("\(screen).png")
-            if screen == "computer-edit" || screen == "emoji-picker" || screen == "settings" {
+            if ["computer-edit", "emoji-picker", "settings", "bot-settings"].contains(screen) {
                 saveHosted(content, size: size, to: url)
             } else {
                 save(content, size: size, to: url)

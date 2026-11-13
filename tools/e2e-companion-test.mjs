@@ -31,9 +31,10 @@ const emit = frame => {
 };
 let model = { instanceId: 'claude', model: 'claude-sonnet-4-5' };
 let threadModel = model;
+let threadSurface = null;
 const card = { title: '允许构建？', subtitle: '', options: ['允许', '拒绝'], requestId: 'req-1', requestType: 'permission', tool: 'Bash' };
 messages.push({ id: 'msg-card', role: 'bot', kind: 'options', card, createdAt: Date.now() });
-const bot = () => ({ id: 'bot-1', name: 'E2E Maus', title: '主线', threadId: 'thread-main', tasks: [{ threadId: 'thread-main', title: '主线', modelSelection: threadModel }], modelSelection: model, messages, hasMore: false });
+const bot = () => ({ id: 'bot-1', name: 'E2E Maus', title: '主线', threadId: 'thread-main', tasks: [{ threadId: 'thread-main', title: '主线', modelSelection: threadModel, ...(threadSurface ? { surface: threadSurface } : {}) }], modelSelection: model, messages, hasMore: false });
 const json = (res, value, status = 200) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(value));
 const harness = createServer(async (req, res) => {
   const path = req.url.split('?')[0];
@@ -67,6 +68,12 @@ const harness = createServer(async (req, res) => {
     return json(res, { ok: true });
   }
   if (path === '/api/bots/bot-1/tasks/thread-main' && req.method === 'PATCH') {
+    if (Object.hasOwn(body, 'surface')) {
+      if (body.surface !== null && !['cloud', 'vm', 'local', 'browser'].includes(body.surface)) return json(res, { error: 'invalid surface' }, 400);
+      threadSurface = body.surface;
+      const updated = bot();
+      return json(res, { bot: updated, task: updated.tasks[0] });
+    }
     if (body.modelSelection?.model === 'reject-model') return json(res, { error: 'this thread is busy' }, 409);
     if (!body.modelSelection?.instanceId || !body.modelSelection?.model) return json(res, { error: 'modelSelection required' }, 400);
     threadModel = body.modelSelection;

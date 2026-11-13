@@ -56,6 +56,8 @@ final class AppStore: ObservableObject {
     @Published private(set) var groups: [ChatGroup] = []
     @Published private(set) var sections: [String] = []
     @Published private(set) var instances: [ProviderInstance] = []
+    @Published private(set) var workLocationConfig: WorkLocationConfig?
+    @Published private(set) var updatingLocations: Set<String> = []
     @Published private(set) var open: OpenChat?
     @Published private(set) var threads: [String: ThreadState] = [:]
     @Published private(set) var searchHits: [SearchHit] = []
@@ -94,6 +96,7 @@ final class AppStore: ObservableObject {
     private var lastReadWrite: [String: Date] = [:]
     private var generation = 0
     private var serverOrder: [String] = []
+    private var locationConfigRevision = 0
 
     private init() {
         let storage = ComputerStore.shared
@@ -263,6 +266,8 @@ final class AppStore: ObservableObject {
         sections = (UserDefaults.standard.dictionary(forKey: Keys.sections) as? [String: [String]])?[target.id] ?? []
         threads = [:]
         instances = []
+        workLocationConfig = nil
+        updatingLocations = []
         searchHits = []
         searching = false
         lastReadWrite = [:]
@@ -287,6 +292,8 @@ final class AppStore: ObservableObject {
         client = nil
         searchTask?.cancel()
         instances = []
+        workLocationConfig = nil
+        updatingLocations = []
         searchHits = []
         ImageCache.shared.clear()
         connection = ConnectionState(phase: .idle, serverName: computer?.serverName ?? "")
@@ -509,6 +516,7 @@ final class AppStore: ObservableObject {
         if open == nil {
             openFirstConversation()
         }
+        Task { [weak self] in await self?.loadWorkLocationConfig() }
     }
 
     private func applyOrder() {
@@ -533,6 +541,7 @@ final class AppStore: ObservableObject {
                 var state = threads[threadId] ?? ThreadState()
                 state.messages = raw.objArray("messages").compactMap { Message(json: $0) }.sorted { $0.createdAt < $1.createdAt }
                 state.hasMore = raw.bool("hasMore", false)
+                state.loaded = true
                 threads[threadId] = state
             }
         }
@@ -542,6 +551,7 @@ final class AppStore: ObservableObject {
                 var state = threads[threadId] ?? ThreadState()
                 state.messages = raw.objArray("messages").compactMap { Message(json: $0) }.sorted { $0.createdAt < $1.createdAt }
                 state.hasMore = raw.bool("hasMore", false)
+                state.loaded = true
                 threads[threadId] = state
             }
         }
@@ -555,16 +565,26 @@ final class AppStore: ObservableObject {
         instances = answer.objArray("instances").compactMap(ProviderInstance.init(json:))
     }
 
+    private func loadWorkLocationConfig() async {
+        guard let client else { return }
+        let expectedGeneration = generation
+        locationConfigRevision += 1
+        let revision = locationConfigRevision
+        guard let answer = try? await client.get("/api/config", timeout: 8) else { return }
+        guard generation == expectedGeneration, locationConfigRevision == revision, !Task.isCancelled else { return }
+        workLocationConfig = WorkLocationConfig(json: answer)
+    }
+
     func openFirstConversation() {
         if let bot = bots.first(where: { !$0.hidden }) {
-            open = OpenChat(target: .bot(bot.id), threadId: bot.threadId, title: firstLine(of: bot.activeTask?.title) ?? bot.name)
+            open(bot: bot)
         } else if let group = groups.first {
             open = OpenChat(target: .group(group.id), threadId: group.threadId, title: group.name)
         }
     }
 
     func open(bot: Bot, threadId: String? = nil, title: String? = nil) {
-        let thread = threadId ?? bot.threadId
+        let thread = threadId ?? bot.latestTask?.threadId ?? bot.threadId
         var chat = OpenChat(target: .bot(bot.id), threadId: thread, title: bot.name)
         if let task = bot.task(threadId: thread), !task.title.isEmpty {
             chat.title = task.title
@@ -615,8 +635,9 @@ final class AppStore: ObservableObject {
     func loadThread(_ threadId: String, force: Bool = false) async -> [Message] {
         guard !threadId.isEmpty, let client else { return [] }
         let expectedGeneration = generation
-        if !force, !(threads[threadId]?.messages.isEmpty ?? true) { return messages(threadId) }
+        if !force, threads[threadId]?.loaded == true { return messages(threadId) }
         guard threads[threadId]?.loading != true else { return messages(threadId) }
+        let previous = threads[threadId] ?? ThreadState()
         threads[threadId, default: ThreadState()].loading = true
         defer { if generation == expectedGeneration { threads[threadId]?.loading = false } }
         do {
@@ -624,13 +645,19 @@ final class AppStore: ObservableObject {
             guard generation == expectedGeneration else { return [] }
             let page = answer.objArray("messages").compactMap { Message(json: $0) }
             var state = threads[threadId] ?? ThreadState()
-            let optimistic = state.messages.filter(\.pending)
             var merged = page
-            for message in optimistic where !merged.contains(where: { $0.id == message.id || ($0.clientId != nil && $0.clientId == message.clientId) }) {
-                merged.append(message)
+            for message in state.messages {
+                let before = previous.messages.first { $0.id == message.id }
+                let changed = before != message
+                if let index = merged.firstIndex(where: { $0.id == message.id || ($0.clientId != nil && $0.clientId == message.clientId) }) {
+                    if !message.pending && changed { merged[index] = message }
+                } else if !previous.loaded || message.pending || changed {
+                    merged.append(message)
+                }
             }
             state.messages = merged.sorted { $0.createdAt < $1.createdAt }
             state.hasMore = answer.bool("hasMore", false)
+            state.loaded = true
             state.activeLeafId = answer.nonEmpty("activeLeafId")
             threads[threadId] = state
             return state.messages
@@ -708,6 +735,9 @@ extension AppStore {
         switch frame.str("kind") {
         case "hello":
             break
+        case "config":
+            locationConfigRevision += 1
+            workLocationConfig = WorkLocationConfig(json: frame)
         case "bot":
             guard let json = frame.obj("bot"), let bot = Bot(json: json) else { return }
             upsert(bot)
@@ -733,6 +763,12 @@ extension AppStore {
             guard let threadId = frame.nonEmpty("threadId"),
                   let json = frame.obj("message"),
                   let message = Message(json: json) else { return }
+            if let at = wireDate(json.int("at") ?? json.int("createdAt")),
+               let botIndex = bots.firstIndex(where: { $0.tasks.contains { $0.threadId == threadId } }),
+               let taskIndex = bots[botIndex].tasks.firstIndex(where: { $0.threadId == threadId }),
+               at > (bots[botIndex].tasks[taskIndex].updatedAt ?? bots[botIndex].tasks[taskIndex].createdAt ?? .distantPast) {
+                bots[botIndex].tasks[taskIndex].updatedAt = at
+            }
             append(threadId: threadId, message: message)
             notifyIfNeeded(message, threadId: threadId)
         case "message.patch":
@@ -819,7 +855,7 @@ extension AppStore {
             if raw["attachments"] != nil { next.attachments = message.attachments }
             if raw["role"] != nil { next.role = message.role }
             if raw["kind"] != nil { next.kind = message.kind }
-            if raw["createdAt"] != nil { next.createdAt = message.createdAt }
+            if raw["at"] != nil || raw["createdAt"] != nil { next.createdAt = message.createdAt }
             next.pending = false
             state.messages[index] = next
         } else {
@@ -845,6 +881,10 @@ extension AppStore {
 extension AppStore {
     func send(text: String, attachments: [Attachment] = []) {
         guard let chat = open else { return }
+        guard !updatingLocations.contains(chat.threadId) else {
+            lastError = localized("运行位置正在更新，请稍后发送。")
+            return
+        }
         guard let client else {
             lastError = localized("还没有连上电脑，消息没有发送。")
             return
@@ -1002,6 +1042,22 @@ extension AppStore {
         }
     }
 
+    func patchBotProfile(botId: String, fields: JSON) {
+        guard let client else { return }
+        Task { [weak self] in
+            do {
+                let answer = try await client.patch("/api/bots/\(botId)/profile", body: fields)
+                if let json = answer.obj("bot"), let bot = Bot(json: json) {
+                    self?.upsert(bot)
+                }
+            } catch let error as APIError {
+                self?.lastError = error.message
+            } catch {
+                self?.lastError = error.localizedDescription
+            }
+        }
+    }
+
     func setModel(botId: String, threadId: String? = nil, selection: ModelSelection) {
         guard let client else { return }
         Task { [weak self] in
@@ -1018,6 +1074,48 @@ extension AppStore {
                 self?.lastError = error.message
             } catch {
                 self?.lastError = error.localizedDescription
+            }
+        }
+    }
+
+    func setWorkLocation(botId: String, threadId: String, location: WorkLocation?) {
+        if let location, !WorkLocation.choices.contains(location) { return }
+        guard let client, connection.isOnline else {
+            lastError = localized("还没有连上电脑，运行位置没有修改。")
+            return
+        }
+        guard !updatingLocations.contains(threadId) else { return }
+        updatingLocations.insert(threadId)
+        let expectedGeneration = generation
+        Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.generation == expectedGeneration { self.updatingLocations.remove(threadId) }
+            }
+            do {
+                let value: Any = location.map { $0.rawValue as Any } ?? NSNull()
+                let answer = try await client.patch("/api/bots/\(botId)/tasks/\(threadId)", body: ["surface": value])
+                guard self.generation == expectedGeneration else { return }
+                let updatedBot = answer.obj("bot").flatMap(Bot.init(json:))
+                if let updatedBot { self.upsert(updatedBot) }
+                var updatedTask = answer.obj("task").flatMap(BotTask.init(json:)) ?? updatedBot?.task(threadId: threadId)
+                if updatedTask == nil {
+                    try await self.refreshAll(client)
+                    guard self.generation == expectedGeneration else { return }
+                    updatedTask = self.bots.first { $0.id == botId }?.task(threadId: threadId)
+                }
+                guard let updatedTask, updatedTask.threadId == threadId,
+                      updatedTask.surface == location, !updatedTask.surfaceAuto else {
+                    self.lastError = localized("远程电脑没有确认运行位置，请检查 OpenMausBot 版本。")
+                    return
+                }
+                if updatedBot == nil, let botIndex = self.bots.firstIndex(where: { $0.id == botId }),
+                   let taskIndex = self.bots[botIndex].tasks.firstIndex(where: { $0.threadId == threadId }) {
+                    self.bots[botIndex].tasks[taskIndex] = updatedTask
+                }
+            } catch {
+                guard self.generation == expectedGeneration else { return }
+                self.lastError = (error as? APIError)?.message ?? error.localizedDescription
             }
         }
     }
@@ -1144,10 +1242,5 @@ extension AppStore {
         case "heic": return "image/heic"
         default: return "image/jpeg"
         }
-    }
-
-    private func firstLine(of text: String?) -> String? {
-        guard let line = text?.split(separator: "\n").first?.trimmingCharacters(in: .whitespaces), !line.isEmpty else { return nil }
-        return String(line)
     }
 }

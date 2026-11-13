@@ -107,8 +107,21 @@ enum SelfCheck {
                   CompanionEndpoint.automaticCandidates([hosted, local]).map(\.url) == [hosted.url])
             check("hosted routes need https", CompanionEndpoint.make(url: "http://phone.example.com", kind: .hosted, priority: 0) == nil)
 
+            check("standing instructions parse", Bot(json: ["id": "soul", "soul": "Always answer in Chinese."])?.soul == "Always answer in Chinese.")
+            check("missing standing instructions read as empty", Bot(json: ["id": "plain"])?.soul == "")
             check("chief role survives a renamed bot", Bot(json: ["id": "chief", "name": "协调员", "chiefOfStaff": true])?.chiefOfStaff == true)
             check("ordinary bot named Chief is not a chief", Bot(json: ["id": "worker", "name": "Chief"])?.chiefOfStaff == false)
+            let locationBot = Bot(json: ["id": "places", "computer": "cloud", "tasks": [
+                ["threadId": "chosen", "surface": "vm"],
+                ["threadId": "automatic", "surface": "browser", "surfaceAuto": true],
+                ["threadId": "future", "surface": "new-place"],
+            ]])!
+            check("conversation and bot locations parse separately", locationBot.computer == .cloud && locationBot.task(threadId: "chosen")?.pinnedLocation == .vm)
+            check("automatic pins do not look like a person's choice", locationBot.task(threadId: "automatic")?.surface == .browser && locationBot.task(threadId: "automatic")?.pinnedLocation == nil)
+            check("unknown locations are not shown as automatic", locationBot.task(threadId: "future")?.pinnedLocation == .unknown)
+            let placeConfig = WorkLocationConfig(json: ["box": ["configured": false], "features": ["browser": false]])
+            check("known unavailable locations are explained", placeConfig.unavailableReason(for: .cloud, bot: locationBot, instance: nil) != nil && placeConfig.unavailableReason(for: .browser, bot: locationBot, instance: nil) != nil)
+            check("missing availability is not mistaken for unavailable", WorkLocationConfig(json: [:]).unavailableReason(for: .vm, bot: locationBot, instance: nil) == nil)
 
             let imageClient = ApiClient(baseURL: "https://computer.example.com", token: nil)
             let imageURL = "https://computer.example.com/api/attachments/qr-code.png"
@@ -225,6 +238,40 @@ enum SelfCheck {
             }
 
             let store = AppStore.shared
+            let botJSON: JSON = [
+                "id": "selfcheck-bot", "name": "Test Bot", "threadId": "selfcheck-old",
+                "tasks": [
+                    ["threadId": "selfcheck-old", "title": "Old", "pinned": true, "createdAt": 1_700_000_000_000, "updatedAt": 1_700_000_001_000],
+                    ["threadId": "selfcheck-recent", "title": "Recent", "createdAt": 1_700_000_000_000, "updatedAt": 1_700_000_003_000],
+                    ["threadId": "selfcheck-created", "title": "Created", "createdAt": 1_700_000_002_000],
+                ],
+            ]
+            let selectionBot = Bot(json: botJSON)!
+            store.handle(["kind": "bot", "bot": botJSON])
+            store.openFirstConversation()
+            check("first bot opens the most recently updated conversation", store.open?.threadId == "selfcheck-recent" && store.open?.title == "Recent")
+            store.open(bot: selectionBot, threadId: "selfcheck-old")
+            check("explicit conversation selection is preserved", store.open?.threadId == "selfcheck-old")
+            store.open(bot: selectionBot)
+            check("selecting a bot returns to its latest conversation", store.open?.threadId == "selfcheck-recent")
+            store.handle([
+                "kind": "message", "threadId": "selfcheck-old",
+                "message": ["id": "selfcheck-live", "at": 1_700_000_004_000, "text": "new activity"],
+            ])
+            if let updatedBot = store.bots.first(where: { $0.id == selectionBot.id }) {
+                store.open(bot: updatedBot)
+                check("live activity changes the latest conversation", store.open?.threadId == "selfcheck-old")
+            } else {
+                check("live activity changes the latest conversation", false)
+            }
+            check("message timestamps use the wire's at field", store.messages("selfcheck-old").first?.createdAt == wireDate(1_700_000_004_000))
+            let legacyBot = Bot(json: ["id": "legacy", "threadId": "legacy-default"])!
+            check("bots without tasks retain their default thread", legacyBot.latestTask == nil)
+            store.open(bot: legacyBot)
+            check("opening a legacy bot uses its default thread", store.open?.threadId == "legacy-default")
+            let untimedBot = Bot(json: ["id": "untimed", "tasks": [["threadId": "first"], ["threadId": "second"]]])!
+            check("missing dates retain the server's task order", untimedBot.latestTask?.threadId == "first")
+
             store.handle([
                 "kind": "message",
                 "threadId": "selfcheck-thread",
@@ -333,6 +380,34 @@ enum SelfCheck {
                 check("app lists bots", !store.bots.isEmpty)
                 check("app seeds the conversation from the bot list", !store.messages("thread-main").isEmpty)
                 if let bot = store.bots.first {
+                    if arguments.contains("--mock-locations") {
+                        var selectionBot = bot
+                        if let main = selectionBot.tasks.firstIndex(where: { $0.threadId == "thread-main" }),
+                           let other = selectionBot.tasks.firstIndex(where: { $0.threadId == "thread-other" }) {
+                            selectionBot.tasks[main].updatedAt = wireDate(1_700_000_050_000)
+                            selectionBot.tasks[other].updatedAt = wireDate(1_700_000_100_000)
+                            store.handle([
+                                "kind": "message", "threadId": "thread-other",
+                                "message": ["id": "msg-other-2", "role": "bot", "text": "最新的回复", "createdAt": 1_700_000_100_000],
+                            ])
+                            store.open(bot: selectionBot)
+                            check("app selects the latest conversation instead of the default", store.open?.threadId == "thread-other" && store.open?.title == "另一个对话")
+                            let loading = await waitUntil(store) { $0.threads["thread-other"]?.loading == true }
+                            store.handle([
+                                "kind": "message.patch", "threadId": "thread-other",
+                                "message": ["id": "msg-other-2", "text": "实时更新的回复"],
+                            ])
+                            let loaded = await waitUntil(store) { $0.messages("thread-other").contains { $0.id == "msg-other-1" } }
+                            check("opening a conversation loads history after a live message", loaded && store.messages("thread-other").filter { $0.id == "msg-other-2" }.count == 1)
+                            check("a live update during history loading is retained", loading && store.messages("thread-other").first { $0.id == "msg-other-2" }?.text == "实时更新的回复")
+                            store.open(bot: selectionBot, threadId: "thread-main")
+                            check("app can still open an older conversation explicitly", store.open?.threadId == "thread-main")
+                            store.open(bot: selectionBot)
+                            check("selecting the bot again opens the latest conversation", store.open?.threadId == "thread-other")
+                        } else {
+                            check("mock provides both conversations", false)
+                        }
+                    }
                     store.open(bot: bot)
                     check("app opens a real thread", store.open?.threadId == "thread-main")
                     store.send(text: "app selfcheck", attachments: [])
@@ -349,6 +424,62 @@ enum SelfCheck {
                         check("card answer settles", settled)
                     } else {
                         check("approval card arrives in the transcript", false)
+                    }
+
+                    if arguments.contains("--mock-locations") {
+                        store.setWorkLocation(botId: bot.id, threadId: "thread-main", location: .vm)
+                        check("location update blocks sending immediately", store.updatingLocations.contains("thread-main"))
+                        let previousCount = store.messages("thread-main").count
+                        store.send(text: "must wait for location")
+                        check("a send cannot race the location update", store.messages("thread-main").count == previousCount && store.lastError != nil)
+                        store.lastError = nil
+                        let pinned = await waitUntil(store) {
+                            !$0.updatingLocations.contains("thread-main") && $0.bots.first?.task(threadId: "thread-main")?.pinnedLocation == .vm
+                        }
+                        check("location is saved for the conversation", pinned)
+                        try? await store.refreshAll()
+                        check("location survives a fresh server snapshot", store.bots.first?.task(threadId: "thread-main")?.pinnedLocation == .vm)
+                        check("another conversation keeps its automatic location", store.bots.first?.task(threadId: "thread-other")?.surfaceAuto == true)
+                        store.send(text: "location selfcheck")
+                        let routed = await waitUntil(store) { $0.messages("thread-main").contains { $0.text == "mock location: vm" } }
+                        check("the next message reaches the selected location", routed)
+                        store.setWorkLocation(botId: bot.id, threadId: "thread-other", location: .browser)
+                        let explicit = await waitUntil(store) {
+                            !$0.updatingLocations.contains("thread-other") && $0.bots.first?.task(threadId: "thread-other")?.pinnedLocation == .browser
+                        }
+                        check("an automatic location can be pinned explicitly", explicit)
+                        store.setWorkLocation(botId: bot.id, threadId: "thread-main", location: nil)
+                        let cleared = await waitUntil(store) {
+                            !$0.updatingLocations.contains("thread-main") && $0.bots.first?.task(threadId: "thread-main")?.surface == nil
+                        }
+                        check("following the bot clears only this conversation's pin", cleared && store.bots.first?.task(threadId: "thread-other")?.pinnedLocation == .browser)
+                        store.setWorkLocation(botId: bot.id, threadId: "thread-busy", location: .vm)
+                        let busyRejected = await waitUntil(store) { !$0.updatingLocations.contains("thread-busy") && $0.lastError != nil }
+                        check("a busy conversation keeps its location and shows the error", busyRejected && store.bots.first?.task(threadId: "thread-busy")?.surface == nil)
+                        store.lastError = nil
+                        store.setWorkLocation(botId: bot.id, threadId: "thread-legacy", location: .vm)
+                        let ignored = await waitUntil(store) { !$0.updatingLocations.contains("thread-legacy") && $0.lastError != nil }
+                        check("a server that ignores the setting is not reported as successful", ignored && store.bots.first?.task(threadId: "thread-legacy")?.surface == nil)
+                        store.lastError = nil
+                        store.patchBotProfile(botId: bot.id, fields: ["soul": "先确认，再执行。"])
+                        let remembered = await waitUntil(store) { $0.bots.first { $0.id == bot.id }?.soul == "先确认，再执行。" }
+                        check("standing instructions save to the bot profile", remembered)
+                        try? await store.refreshAll()
+                        check("standing instructions survive a refresh", store.bots.first { $0.id == bot.id }?.soul == "先确认，再执行。")
+                    }
+                    if arguments.contains("--e2e-locations") {
+                        store.setWorkLocation(botId: bot.id, threadId: "thread-main", location: .browser)
+                        let pinned = await waitUntil(store) {
+                            !$0.updatingLocations.contains("thread-main") && $0.bots.first?.task(threadId: "thread-main")?.pinnedLocation == .browser
+                        }
+                        check("encrypted companion accepts a conversation location", pinned)
+                        try? await store.refreshAll()
+                        check("encrypted companion reads the saved location", store.bots.first?.task(threadId: "thread-main")?.pinnedLocation == .browser)
+                        store.setWorkLocation(botId: bot.id, threadId: "thread-main", location: nil)
+                        let cleared = await waitUntil(store) {
+                            !$0.updatingLocations.contains("thread-main") && $0.bots.first?.task(threadId: "thread-main")?.surface == nil
+                        }
+                        check("encrypted companion clears the conversation location", cleared)
                     }
 
                     store.setModel(botId: bot.id, threadId: "thread-main", selection: ModelSelection(instanceId: "claude", model: "claude-opus-4-1"))

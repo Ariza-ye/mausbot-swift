@@ -103,6 +103,78 @@ final class SlimVerticalScroller: NSScroller {
     }
 }
 
+struct SlimTextEditor: NSViewRepresentable {
+    @Binding var text: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = SlimTextScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .legacy
+        scrollView.verticalScroller = SlimVerticalScroller()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+
+        let textView = NSTextView()
+        textView.delegate = context.coordinator
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.drawsBackground = false
+        textView.textContainerInset = .zero
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.font = Coordinator.editorFont()
+        textView.textColor = .labelColor
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.text = $text
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        textView.font = Coordinator.editorFont()
+        if textView.string != text {
+            textView.string = text
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var text: Binding<String>
+        weak var textView: NSTextView?
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        static func editorFont() -> NSFont {
+            let family = UserDefaults.standard.string(forKey: AppFont.preferenceKey) ?? ""
+            if !family.isEmpty, let font = NSFont(name: family, size: 12.5) { return font }
+            return .systemFont(ofSize: 12.5)
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            text.wrappedValue = textView.string
+            (textView.enclosingScrollView?.verticalScroller as? SlimVerticalScroller)?.showTemporarily()
+        }
+    }
+}
+
+final class SlimTextScrollView: NSScrollView {
+    override func reflectScrolledClipView(_ clipView: NSClipView) {
+        super.reflectScrolledClipView(clipView)
+        (verticalScroller as? SlimVerticalScroller)?.showTemporarily()
+    }
+}
+
 struct SidebarResizeHandle: NSViewRepresentable {
     let minWidth: CGFloat
     let maxWidth: CGFloat

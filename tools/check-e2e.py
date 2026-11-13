@@ -65,7 +65,7 @@ try:
     launch(['node', str(root / 'tools/e2e-companion-test.mjs')], env=env)
     run('protocol')
     run('e2e', '--url', 'http://127.0.0.1:18991')
-    run('app', '--link', get('/test/invite')['link'])
+    run('app', '--link', get('/test/invite')['link'], '--e2e-locations')
     paired = plain_pair('Legacy migration fixture')
     run('upgrade', '--url', base, '--token', paired['token'])
     if args.relay:

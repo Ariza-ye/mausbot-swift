@@ -68,10 +68,19 @@ state = {
                 "from": {"name": "Builder", "color": "blue"},
             }
         ],
+        "thread-other": [
+            {"id": "msg-other-1", "role": "user", "text": "之前的消息", "createdAt": 1_700_000_075_000},
+            {"id": "msg-other-2", "role": "bot", "text": "最新的回复", "createdAt": 1_700_000_100_000},
+        ],
+        "thread-busy": [],
+        "thread-legacy": [],
     },
     "counter": 100,
+    "soul": "",
     "model": {"instanceId": "claude", "model": "claude-sonnet-4-5"},
     "thread_model": None,
+    "thread_surfaces": {"thread-other": "browser"},
+    "auto_surfaces": {"thread-other"},
     "card": {
         "title": "运行 rm -rf build？",
         "subtitle": "这个操作会删除构架目录。",
@@ -112,19 +121,28 @@ def broadcast(kind, **fields):
 def bot_payload(port):
     with state_lock:
         messages = list(state["messages"]["thread-main"])
+        tasks = []
+        for thread_id, title in (("thread-main", "主线"), ("thread-other", "另一个对话"),
+                                 ("thread-busy", "忙碌的对话"), ("thread-legacy", "旧服务")):
+            task = {"threadId": thread_id, "title": title, "unread": False,
+                    "busy": thread_id == "thread-busy", "pinned": thread_id == "thread-main",
+                    "modelSelection": dict(state["thread_model"] or state["model"])}
+            if thread_id in state["thread_surfaces"]:
+                task["surface"] = state["thread_surfaces"][thread_id]
+            if thread_id in state["auto_surfaces"]:
+                task["surfaceAuto"] = True
+            tasks.append(task)
     return {
         "id": "bot-1",
         "name": "Maus",
         "title": "主管",
         "description": "Mock computer",
+        "soul": state["soul"],
         "color": "green",
         "avatarUrl": None,
         "threadId": "thread-main",
         "mainThreadId": "thread-main",
-        "tasks": [
-            {"threadId": "thread-main", "title": "主线", "unread": False, "busy": False, "pinned": True,
-             "modelSelection": dict(state["thread_model"] or state["model"])},
-        ],
+        "tasks": tasks,
         "unread": False,
         "pinned": True,
         "hidden": False,
@@ -202,14 +220,17 @@ class Handler(BaseHTTPRequestHandler):
                 "computerControl": {},
             })
         if path == "/api/config":
-            return self.send_json(200, {"name": "Mock Studio", "capabilities": {"queueing": True}})
+            return self.send_json(200, {"name": "Mock Studio", "capabilities": {"queueing": True},
+                                        "box": {"configured": True}, "features": {"browser": True},
+                                        "browserEngine": {"kind": "engine"}})
         if path == "/api/instances":
             return self.send_json(200, {"instances": [{
                 "instanceId": "claude",
                 "driverKind": "claude",
                 "displayName": "Claude",
                 "enabled": True,
-                "capabilities": {"effortLevels": ["low", "medium", "high", "max"]},
+                "capabilities": {"effortLevels": ["low", "medium", "high", "max"],
+                                 "computerMcp": True, "browserMcp": True},
                 "models": {"default": "claude-sonnet-4-5", "options": [
                     {"id": "claude-sonnet-4-5", "label": "Sonnet 4.5"},
                     {"id": "claude-opus-4-1", "label": "Opus 4.1"},
@@ -219,6 +240,8 @@ class Handler(BaseHTTPRequestHandler):
             thread_id = path.split("/")[3]
             with state_lock:
                 messages = list(state["messages"].get(thread_id, []))
+            if thread_id == "thread-other":
+                time.sleep(0.3)
             params = parse_qs(url.query)
             before = (params.get("before") or [None])[0]
             if before:
@@ -321,6 +344,36 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authed():
             return self.denied()
         body = self.read_json()
+        if path == "/api/bots/bot-1/profile":
+            soul = body.get("soul")
+            if not isinstance(soul, str):
+                return self.send_json(400, {"error": "soul must be a string"})
+            if len(soul.encode("utf-8")) > 24_000:
+                return self.send_json(400, {"error": "standing instructions must be at most 24000 bytes"})
+            with state_lock:
+                state["soul"] = soul
+            return self.send_json(200, {"bot": bot_payload(self.server.server_port)})
+        if path.startswith("/api/bots/bot-1/tasks/") and "surface" in body:
+            thread_id = path.rsplit("/", 1)[-1]
+            if thread_id not in ("thread-main", "thread-other", "thread-busy", "thread-legacy"):
+                return self.send_json(404, {"error": "no such task"})
+            if thread_id == "thread-busy":
+                return self.send_json(409, {"error": "Stop this thread before changing its computer destination."})
+            surface = body["surface"]
+            if surface is not None and surface not in ("cloud", "vm", "local", "browser"):
+                return self.send_json(400, {"error": "invalid surface"})
+            time.sleep(0.3)
+            with state_lock:
+                if thread_id != "thread-legacy":
+                    if surface is None:
+                        state["thread_surfaces"].pop(thread_id, None)
+                    else:
+                        state["thread_surfaces"][thread_id] = surface
+                    state["auto_surfaces"].discard(thread_id)
+            bot = bot_payload(self.server.server_port)
+            task = next(task for task in bot["tasks"] if task["threadId"] == thread_id)
+            broadcast("bot", bot=bot)
+            return self.send_json(200, {"bot": bot, "task": task})
         if path == "/api/bots/bot-1/tasks/thread-main":
             selection = body.get("modelSelection")
             if not isinstance(selection, dict) or not selection.get("instanceId") or not selection.get("model"):
@@ -363,17 +416,18 @@ class Handler(BaseHTTPRequestHandler):
             message["attachments"] = body["attachments"]
         with state_lock:
             state["messages"].setdefault(thread_id, []).append(message)
+            surface = state["thread_surfaces"].get(thread_id)
         broadcast("message", threadId=thread_id, message=message)
         if not room:
-            threading.Timer(0.4, self.reply, args=(thread_id, body.get("text", ""))).start()
+            threading.Timer(0.4, self.reply, args=(thread_id, body.get("text", ""), surface)).start()
         return self.send_json(202, {"ok": True, "message": message})
 
-    def reply(self, thread_id, text):
+    def reply(self, thread_id, text, surface):
         message = {
             "id": next_id("msg"),
             "role": "bot",
             "kind": "text",
-            "text": f"收到：{text}" if text else "收到。",
+            "text": f"mock location: {surface or 'auto'}" if text == "location selfcheck" else (f"收到：{text}" if text else "收到。"),
             "createdAt": now_ms(),
         }
         with state_lock:

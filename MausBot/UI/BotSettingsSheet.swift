@@ -6,7 +6,11 @@ struct BotSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var loadedName = ""
+    @State private var instructions = ""
+    @State private var loadedInstructions = ""
     @State private var showIconPicker = false
+
+    private static let instructionsLimit = 24_000
 
     private var bot: Bot? {
         store.bots.first { $0.id == botId }
@@ -69,6 +73,37 @@ struct BotSettingsSheet: View {
                                 .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.subtleFill))
                             Button("保存") { saveName() }
                                 .disabled(trimmedName.isEmpty || trimmedName == loadedName)
+                        }
+                    }
+
+                    field("指示") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ZStack(alignment: .topLeading) {
+                                SlimTextEditor(text: $instructions)
+                                    .padding(6)
+                                    .frame(minHeight: 110, maxHeight: 180)
+                                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.subtleFill))
+                                if instructions.isEmpty {
+                                    Text("写下长期指示…")
+                                        .appFont(size: 12.5)
+                                        .foregroundStyle(.tertiary)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 7)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                            HStack(spacing: 8) {
+                                Text("随每条消息发送，用来固定工作方式和偏好。")
+                                    .appFont(size: 11)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text(localized("%lld / 24000 字节", Int64(instructionsByteCount)))
+                                    .appFont(size: 10.5)
+                                    .foregroundStyle(instructionsByteCount > Self.instructionsLimit ? Color.red : Color.secondary)
+                                    .help("指示最多 24000 字节")
+                                Button("保存") { saveInstructions() }
+                                    .disabled(!canSaveInstructions)
+                            }
                         }
                     }
 
@@ -233,6 +268,8 @@ struct BotSettingsSheet: View {
         .onAppear {
             name = bot?.name ?? ""
             loadedName = name
+            instructions = bot?.soul ?? ""
+            loadedInstructions = instructions
         }
         .onChange(of: bot?.name) { _, value in
             if let value, loadedName != value, trimmedName == loadedName {
@@ -240,10 +277,32 @@ struct BotSettingsSheet: View {
                 loadedName = value
             }
         }
+        .onChange(of: bot?.soul) { _, value in
+            guard let value else { return }
+            if value == instructions {
+                loadedInstructions = value
+            } else if instructions == loadedInstructions {
+                instructions = value
+                loadedInstructions = value
+            }
+        }
     }
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var instructionsByteCount: Int {
+        instructions.lengthOfBytes(using: .utf8)
+    }
+
+    private var canSaveInstructions: Bool {
+        instructions != loadedInstructions && instructionsByteCount <= Self.instructionsLimit
+    }
+
+    private func saveInstructions() {
+        guard canSaveInstructions else { return }
+        store.patchBotProfile(botId: botId, fields: ["soul": instructions])
     }
 
     private func saveName() {

@@ -13,6 +13,7 @@ struct ChatView: View {
     @State private var atBottom = true
     @State private var userScrolling = false
     @State private var scrollRequest = 0
+    @State private var showLocationPicker = false
     @FocusState private var composerFocused: Bool
 
     private let bottomID = "conversation-bottom"
@@ -312,6 +313,10 @@ struct ChatView: View {
                     .help(localized(group == nil ? "附加图片" : "房间里只发送文字"))
                     .accessibilityLabel("附加图片")
 
+                    if let bot {
+                        workLocationPicker(bot)
+                    }
+
                     TextField(
                         "",
                         text: $draft,
@@ -416,7 +421,147 @@ struct ChatView: View {
     }
 
     private var canSend: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachment != nil
+        !store.updatingLocations.contains(chat.threadId)
+            && (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachment != nil)
+    }
+
+    private func workLocationPicker(_ bot: Bot) -> some View {
+        let task = bot.task(threadId: chat.threadId)
+        let location = bot.computer == .off ? WorkLocation.off : (task?.surface ?? bot.computer ?? .auto)
+        let updating = store.updatingLocations.contains(chat.threadId)
+        let busy = task?.busy == true || messages.contains { $0.isUser && $0.pending }
+        return Button {
+            showLocationPicker = true
+        } label: {
+            HStack(spacing: 5) {
+                if updating {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: locationIcon(location))
+                }
+                Text(locationLabel(location))
+                    .lineLimit(1)
+            }
+            .appFont(size: 11.5, weight: .medium)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(Capsule().fill(Color.primary.opacity(0.06)))
+            .frame(height: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!store.connection.isOnline || task == nil || busy || updating || bot.computer == .off)
+        .help(localized(busy ? "请等待当前对话完成后切换运行位置" : "选择此对话的运行位置"))
+        .accessibilityLabel(localized("运行位置：%@", locationLabel(location)))
+        .popover(isPresented: $showLocationPicker, arrowEdge: .bottom) {
+            workLocationMenu(bot)
+        }
+    }
+
+    private func workLocationMenu(_ bot: Bot) -> some View {
+        let task = bot.task(threadId: chat.threadId)
+        let pin = task?.pinnedLocation
+        let defaultLocation = bot.computer ?? .auto
+        let selection = task?.modelSelection ?? bot.modelSelection
+        let instance = store.instances.first { $0.instanceId == selection?.instanceId }
+        let config = store.workLocationConfig ?? WorkLocationConfig(json: [:])
+        return VStack(alignment: .leading, spacing: 3) {
+            Text("此对话的运行位置")
+                .appFont(size: 11, weight: .medium)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+            workLocationRow(
+                bot: bot,
+                location: nil,
+                title: defaultLocation == .auto ? localized("自动") : localized("跟随 Bot 设置"),
+                detail: defaultLocation == .auto ? localized("为每项任务选择合适的位置") : localized("当前：%@", locationLabel(defaultLocation)),
+                icon: locationIcon(defaultLocation),
+                selected: pin == nil
+            )
+            ForEach(WorkLocation.choices, id: \.rawValue) { location in
+                let reason = config.unavailableReason(for: location, bot: bot, instance: instance)
+                workLocationRow(
+                    bot: bot,
+                    location: location,
+                    title: locationLabel(location),
+                    detail: reason ?? locationDetail(location),
+                    icon: locationIcon(location),
+                    selected: pin == location,
+                    disabled: reason != nil
+                )
+            }
+        }
+        .padding(8)
+        .frame(width: 300)
+    }
+
+    private func workLocationRow(bot: Bot, location: WorkLocation?, title: String, detail: String,
+                                 icon: String, selected: Bool, disabled: Bool = false) -> some View {
+        Button {
+            showLocationPicker = false
+            guard bot.task(threadId: chat.threadId)?.pinnedLocation != location else { return }
+            store.setWorkLocation(botId: bot.id, threadId: chat.threadId, location: location)
+        } label: {
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: icon)
+                    .frame(width: 16)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).appFont(size: 12.5, weight: .medium)
+                    Text(detail).appFont(size: 11).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 4)
+                if selected {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Theme.accent)
+                        .padding(.top, 2)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.5 : 1)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func locationLabel(_ location: WorkLocation) -> String {
+        switch location {
+        case .auto: return localized("自动")
+        case .cloud: return localized("云端桌面")
+        case .vm: return localized("私有桌面")
+        case .local: return localized("配对电脑")
+        case .browser: return localized("浏览器")
+        case .off: return localized("已关闭")
+        case .unknown: return localized("未知位置")
+        }
+    }
+
+    private func locationIcon(_ location: WorkLocation) -> String {
+        switch location {
+        case .auto: return "sparkles"
+        case .cloud: return "cloud"
+        case .vm: return "shippingbox"
+        case .local: return "desktopcomputer"
+        case .browser: return "globe"
+        case .off: return "display.slash"
+        case .unknown: return "questionmark.circle"
+        }
+    }
+
+    private func locationDetail(_ location: WorkLocation) -> String {
+        switch location {
+        case .cloud: return localized("云端中的桌面")
+        case .vm: return localized("配对电脑上隔离的桌面")
+        case .local: return localized("配对电脑的屏幕和应用")
+        case .browser: return localized("仅限网页")
+        default: return ""
+        }
     }
 
     private func attachmentChip(_ attachment: Attachment) -> some View {

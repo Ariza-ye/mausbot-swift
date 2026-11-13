@@ -29,11 +29,11 @@ sudo xattr -r -d com.apple.quarantine /Applications/MausBot.app
 ## Features
 
 - **Multiple computers:** Pair using a link or an address and pairing code, switch computers, set local names, inspect connection addresses, reconnect, and forget devices.
-- **Conversations and rooms:** Browse Bots and rooms, switch tasks (conversations), create conversations, load older messages, mark messages as read, and search globally.
-- **Chat:** Stream replies, render Markdown, upload and preview images, save attachments, export conversations, stop replies, and delete queued messages. Rooms currently support text messages only.
+- **Conversations and rooms:** Browse Bots and rooms, switch tasks (conversations), create conversations, load older messages, mark messages as read, and search globally. Selecting a bot opens its most recently active conversation.
+- **Chat:** Stream replies, choose a work location for each bot conversation, render Markdown, upload and preview images, save attachments, export conversations, stop replies, and delete queued messages. Rooms currently support text messages only.
 - **Activity messages:** Consecutive tool activities are grouped into expandable sections with summaries, execution status, and failure counts.
 - **Approvals and questions:** Allow, deny, or always allow requests, and answer using options or free text.
-- **Bot management:** Create, rename, pin, hide, and configure notifications and models for Bots; set custom Emoji icons locally.
+- **Bot management:** Create and rename Bots, edit standing instructions, pin or hide them, configure notifications and models, and set custom Emoji icons locally.
 - **Native experience:** macOS notifications, system/light/dark themes, and keyboard shortcuts for sending messages.
 - **Connection recovery:** Reconnect SSE streams with backoff, save event cursors per computer, merge streaming frames, and reload data when the server cannot resume a stream.
 - **Encrypted transport:** Official E2E v1, direct Wi-Fi / Tailscale WebSocket connections, and Relay, with upgrades for existing pairings.
@@ -140,8 +140,13 @@ Conversation.
 
 Press `Enter` to send, `Shift + Enter` for a new line, or `⌘ + Enter` to send.
 Use the paperclip to upload one image in a Bot conversation; rooms currently
-support text messages only. Consecutive tool activities are collapsed into an
-Activity group, which can be expanded to inspect each result.
+support text messages only. The work location menu selects a cloud desktop,
+private desktop, paired computer, or browser for the current Bot conversation.
+Auto or Follow the bot's setting restores its default. The remote OpenMausBot
+saves the selection; "paired computer" means the computer running OpenMausBot.
+Wait for the conversation to finish before changing its location. Consecutive
+tool activities are collapsed into an Activity group, which can be expanded to
+inspect each result.
 
 Open Bot Settings from the sidebar context menu or the chat menu to change the
 name, pinning, visibility, notifications, default model, and thinking effort.
@@ -180,7 +185,7 @@ End-to-end checks use a mock computer (Python 3 standard library, no dependencie
 ```bash
 python3 tools/mock-companion.py --port 8799 &
 "$APP" --selfcheck all --url http://127.0.0.1:8799 --credential 123456
-"$APP" --selfcheck app --url http://127.0.0.1:8799 --credential 123456
+"$APP" --selfcheck app --url http://127.0.0.1:8799 --credential 123456 --mock-locations
 ```
 
 `all` covers health checks, pairing, the Bot list, sending and reading back
