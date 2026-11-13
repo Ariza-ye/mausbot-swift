@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import WebKit
 
 /// Renders one screen to a PNG without a window, for checking layout where
 /// screen capture is unavailable. One render per process: mutating the store
@@ -118,8 +119,11 @@ enum Render {
 
             content = AnyView(content.environment(\.locale, AppLanguage.current.locale))
             let url = folder.appendingPathComponent("\(screen).png")
-            if ["computer-edit", "emoji-picker", "settings", "bot-settings"].contains(screen) {
-                saveHosted(content, size: size, to: url)
+            if ["gallery", "chat"].contains(screen) {
+                content = AnyView(content.background(Theme.windowBackground).preferredColorScheme(store.appearance.colorScheme ?? .light))
+            }
+            if ["computer-edit", "emoji-picker", "settings", "bot-settings", "gallery", "chat"].contains(screen) {
+                await saveHosted(content, size: size, to: url, waitForMarkdown: ["gallery", "chat"].contains(screen))
             } else {
                 save(content, size: size, to: url)
             }
@@ -148,13 +152,32 @@ enum Render {
         exit(2)
     }
 
-    private static func saveHosted(_ view: AnyView, size: CGSize, to url: URL) {
+    private static func saveHosted(_ view: AnyView, size: CGSize, to url: URL, waitForMarkdown: Bool) async {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         let host = NSHostingView(rootView: view)
         window.contentView = host
         host.frame = NSRect(origin: .zero, size: size)
         host.layoutSubtreeIfNeeded()
         host.display()
+        if waitForMarkdown {
+            for _ in 0..<80 {
+                let previews = markdownViews(in: host)
+                if previews.isEmpty { break }
+                var ready = true
+                for preview in previews {
+                    let script = "(() => { const body = document.getElementById('content'); if (!body || !body.firstElementChild) return false; return !body.querySelector('pre code:not(.hljs)') && !body.textContent.includes('$$'); })()"
+                    if (try? await preview.evaluateJavaScript(script)) as? Bool != true {
+                        ready = false
+                    }
+                }
+                host.layoutSubtreeIfNeeded()
+                if ready { break }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            host.layoutSubtreeIfNeeded()
+            host.display()
+        }
         guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { fail("could not create bitmap") }
         host.cacheDisplay(in: host.bounds, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else { fail("could not encode bitmap") }
@@ -163,6 +186,11 @@ enum Render {
         } catch {
             fail(error.localizedDescription)
         }
+    }
+
+    private static func markdownViews(in view: NSView) -> [WKWebView] {
+        if let preview = view as? MarkdownWebView { return [preview] }
+        return view.subviews.flatMap { markdownViews(in: $0) }
     }
 
     private static func save(_ view: AnyView, size: CGSize, to url: URL) {

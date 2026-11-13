@@ -29,6 +29,9 @@ enum SelfCheck {
         if command == "e2e" {
             return await E2ESelfCheck.run(baseURL: value(for: "--url", in: arguments))
         }
+        if command == "markdown-ui" {
+            return await MarkdownPreviewSelfCheck.run()
+        }
         if command == "upgrade", let url = value(for: "--url", in: arguments), let token = value(for: "--token", in: arguments) {
             return await E2ESelfCheck.upgrade(baseURL: url, token: token)
         }
@@ -175,6 +178,18 @@ enum SelfCheck {
             } ?? false
             let code = inline?.runs.contains { run in run.inlinePresentationIntent?.contains(.code) == true } ?? false
             check("inline markdown keeps bold and code", emphasized && code)
+
+            let markdownReply = MarkdownRenderer.render("# 标题\n\n第一段 🎉 **重点** [链接](https://example.com)\n\n第二段内容")
+            check("markdown renders headings, links and emphasis", markdownReply?.html.contains("<h1>标题</h1>") == true && markdownReply?.html.contains("<strong>重点</strong>") == true && markdownReply?.html.contains("href=\"https://example.com\"") == true)
+            let tableReply = MarkdownRenderer.render("- 外层\n  - 内层\n\n| 名称 | 结果 |\n| --- | --- |\n| 检查 | 通过 |")
+            check("markdown renders nested lists and tables", tableReply?.html.contains("<table>") == true && tableReply?.html.components(separatedBy: "<ul>").count == 3)
+            let mathReply = MarkdownRenderer.render("$x_{i+1} = a*b$\n\n```swift\nlet cost = \"$5\"\n```")
+            check("math survives markdown parsing and code remains literal", mathReply?.containsMath == true && mathReply?.html.contains("$x_{i+1} = a*b$") == true && mathReply?.html.contains("let cost = &quot;$5&quot;") == true)
+            let multilineMath = MarkdownRenderer.render("$$\nx_{1} = a*b\n$$")
+            let codeMath = MarkdownRenderer.render("`$x$`\n\n```\n$y$\n```")
+            check("multiline formulas survive while code is excluded", multilineMath?.containsMath == true && multilineMath?.html.contains("x_{1} = a*b") == true && multilineMath?.html.contains("<br") == false && codeMath?.containsMath == false)
+            let unsafeReply = MarkdownRenderer.render("<script>alert(1)</script>\n\n[bad](javascript:alert%281%29)")
+            check("raw HTML remains visible without executing", unsafeReply?.html.contains("&lt;script&gt;alert(1)&lt;/script&gt;") == true && unsafeReply?.html.contains("<script>") == false && unsafeReply?.html.contains("href=\"javascript:") == false)
 
             let activityDate = Date(timeIntervalSince1970: 1_700_000_000)
             let activity = Message(id: "tool-1", role: "bot", kind: "activity", text: "", createdAt: activityDate,

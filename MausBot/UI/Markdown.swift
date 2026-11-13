@@ -1,247 +1,229 @@
+import AppKit
 import SwiftUI
+import WebKit
 
-/// Enough Markdown for a chat bubble: paragraphs, headings, lists, quotes,
-/// fenced code, rules and tables. Bot replies are rendered; words the person
-/// typed stay literal.
-struct MarkdownText: View {
+struct MarkdownText: NSViewRepresentable {
     let text: String
+    @AppStorage(AppFont.preferenceKey) private var fontFamily = ""
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var height: CGFloat = 22
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(MarkdownBlock.parse(text).enumerated()), id: \.offset) { _, block in
-                view(for: block)
-            }
-        }
-        .textSelection(.enabled)
+    func makeCoordinator() -> Coordinator {
+        Coordinator(height: $height)
     }
 
-    @ViewBuilder
-    private func view(for block: MarkdownBlock) -> some View {
-        switch block {
-        case .paragraph(let content):
-            Text(inline(content))
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
-        case .heading(let level, let content):
-            Text(inline(content))
-                .appFont(size: level <= 2 ? 17 : 15, weight: .semibold)
-                .padding(.top, 2)
-        case .bullet(let content):
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
-                if content.hasPrefix("[ ] ") || content.lowercased().hasPrefix("[x] ") {
-                    Image(systemName: content.lowercased().hasPrefix("[x]") ? "checkmark.square" : "square")
-                        .foregroundStyle(.secondary)
-                    Text(inline(String(content.dropFirst(4)))).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("•").foregroundStyle(.secondary)
-                    Text(inline(content)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.leading, 2)
-        case .ordered(let mark, let content):
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
-                Text(mark).foregroundStyle(.secondary).monospacedDigit()
-                Text(inline(content)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.leading, 2)
-        case .quote(let content):
-            Text(inline(content))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.leading, 12)
-                .overlay(alignment: .leading) {
-                    Rectangle().fill(Theme.hairline).frame(width: 2)
-                }
-        case .code(let content):
-            // A horizontal ScrollView is greedy vertically: inside a transcript
-            // it would swallow the page. Wrap instead.
-            Text(content)
-                .font(.system(size: 12, design: .monospaced))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Theme.hairline, lineWidth: 1)
-            )
-        case .table(let content):
-            let rows = content.split(separator: "\n").map { line in
-                String(line).trimmingCharacters(in: CharacterSet(charactersIn: "|"))
-                    .split(separator: "|", omittingEmptySubsequences: false)
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-            }
-            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 8) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { index, cells in
-                    GridRow {
-                        ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                            Text(inline(cell))
-                                .appFont(size: 12, weight: index == 0 ? .semibold : .regular)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: 240, alignment: .leading)
-                        }
-                    }
-                    if index == 0 { Divider().gridCellUnsizedAxes(.horizontal) }
-                }
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.04))
-            )
-        case .rule:
-            Rectangle().fill(Theme.hairline).frame(height: 1).padding(.vertical, 2)
-        }
+    func makeNSView(context: Context) -> MarkdownWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.userContentController.add(context.coordinator, name: "markdown")
+        let view = MarkdownWebView(frame: .zero, configuration: configuration)
+        view.navigationDelegate = context.coordinator
+        view.setValue(false, forKey: "drawsBackground")
+        context.coordinator.webView = view
+        context.coordinator.loadPreview()
+        return view
     }
 
-    private func inline(_ source: String) -> AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .inlineOnlyPreservingWhitespace,
-            failurePolicy: .returnPartiallyParsedIfPossible
-        )
-        return (try? AttributedString(markdown: source, options: options)) ?? AttributedString(source)
+    func updateNSView(_ view: MarkdownWebView, context: Context) {
+        context.coordinator.height = $height
+        context.coordinator.update(text: text, fontFamily: fontFamily, dark: colorScheme == .dark)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView view: MarkdownWebView, context: Context) -> CGSize? {
+        let available = proposal.width.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 620
+        guard available > 0 else { return .zero }
+        var width = available
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if !text.contains("\n"), text.count < 160,
+           !["#", ">", "- ", "* ", "+ ", "`", "|"].contains(where: trimmed.hasPrefix),
+           trimmed.range(of: #"^\d+[.)]\s"#, options: .regularExpression) == nil {
+            let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            let plain = (try? AttributedString(markdown: text, options: options)).map { String($0.characters) } ?? text
+            let font = (!fontFamily.isEmpty ? NSFont(name: fontFamily, size: 13.5) : nil) ?? .systemFont(ofSize: 13.5)
+            let natural = (plain as NSString).size(withAttributes: [.font: font]).width
+            width = min(available, ceil(natural * 1.03) + 8)
+        }
+        return CGSize(width: max(1, width), height: max(1, height))
+    }
+
+    static func dismantleNSView(_ view: MarkdownWebView, coordinator: Coordinator) {
+        coordinator.stop()
+        view.configuration.userContentController.removeScriptMessageHandler(forName: "markdown")
+        view.navigationDelegate = nil
+        view.stopLoading()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        var height: Binding<CGFloat>
+        weak var webView: MarkdownWebView?
+        private var source: String?
+        private var fontFamily = ""
+        private var dark = false
+        private var ready = false
+        private var rendered: MarkdownRenderer.Result?
+        private var renderTask: Task<Void, Never>?
+        private var lastRenderStarted: UInt64 = 0
+
+        private var previewURL: URL? {
+            Bundle.main.resourceURL?.appendingPathComponent("MarkdownPreview.bundle/index.html")
+        }
+
+        init(height: Binding<CGFloat>) {
+            self.height = height
+        }
+
+        func loadPreview() {
+            guard let url = previewURL else { return }
+            ready = false
+            webView?.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        }
+
+        func update(text: String, fontFamily: String, dark: Bool) {
+            if self.fontFamily != fontFamily || self.dark != dark {
+                self.fontFamily = fontFamily
+                self.dark = dark
+                updateAppearance()
+            }
+            guard source != text else { return }
+            source = text
+            scheduleRender()
+        }
+
+        private func scheduleRender() {
+            guard renderTask == nil, source != nil else { return }
+            let now = DispatchTime.now().uptimeNanoseconds
+            let elapsed = lastRenderStarted == 0 ? UInt64.max : now - lastRenderStarted
+            let delay = elapsed >= 80_000_000 ? 0 : 80_000_000 - elapsed
+            renderTask = Task { [weak self] in
+                if delay > 0 { try? await Task.sleep(nanoseconds: delay) }
+                guard !Task.isCancelled, let self, let text = self.source else { return }
+                self.lastRenderStarted = DispatchTime.now().uptimeNanoseconds
+                let result = await Task.detached(priority: .userInitiated) { MarkdownRenderer.render(text) }.value
+                guard !Task.isCancelled else { return }
+                self.rendered = result
+                self.showRendered()
+                self.renderTask = nil
+                if self.source != text { self.scheduleRender() }
+            }
+        }
+
+        func stop() {
+            renderTask?.cancel()
+            renderTask = nil
+            webView = nil
+        }
+
+        private func showRendered() {
+            guard ready, let rendered, let webView else { return }
+            webView.callAsyncJavaScript(
+                "window.markdownPreview.render(data)",
+                arguments: ["data": ["html": rendered.html, "containsMath": rendered.containsMath]],
+                in: nil, in: .page
+            ) { _ in }
+        }
+
+        private func updateAppearance() {
+            guard ready, let webView else { return }
+            webView.callAsyncJavaScript(
+                "window.markdownPreview.setAppearance(theme, font)",
+                arguments: ["theme": dark ? "dark" : "light", "font": fontFamily],
+                in: nil, in: .page
+            ) { _ in }
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+            switch type {
+            case "ready":
+                ready = true
+                updateAppearance()
+                showRendered()
+            case "size":
+                guard let value = body["height"] as? NSNumber else { return }
+                let next = CGFloat(truncating: value)
+                guard next.isFinite, next > 0, abs(next - height.wrappedValue) >= 1 else { return }
+                height.wrappedValue = next
+            default:
+                break
+            }
+        }
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
+            if url.isFileURL, url.standardizedFileURL.path == previewURL?.standardizedFileURL.path {
+                decisionHandler(.allow)
+            } else if navigationAction.navigationType == .linkActivated, ["https", "http", "mailto"].contains(url.scheme?.lowercased() ?? "") {
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+            } else {
+                decisionHandler(.cancel)
+            }
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            loadPreview()
+        }
     }
 }
 
-enum MarkdownBlock: Equatable {
-    case paragraph(String)
-    case heading(Int, String)
-    case bullet(String)
-    case ordered(String, String)
-    case quote(String)
-    case code(String)
-    case table(String)
-    case rule
+final class MarkdownWebView: WKWebView {
+    private var dragScrollTimer: Timer?
+    private var lastDragEvent: NSEvent?
 
-    static func parse(_ text: String) -> [MarkdownBlock] {
-        let lines = text.replacingOccurrences(of: "\r\n", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        var blocks: [MarkdownBlock] = []
-        var paragraph: [String] = []
-        var index = 0
+    deinit { dragScrollTimer?.invalidate() }
 
-        func flushParagraph() {
-            let joined = paragraph.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !joined.isEmpty { blocks.append(.paragraph(joined)) }
-            paragraph.removeAll()
-        }
+    override func mouseDown(with event: NSEvent) {
+        stopDragScrolling()
+        super.mouseDown(with: event)
+    }
 
-        while index < lines.count {
-            let line = lines[index]
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            if trimmed.hasPrefix("```") {
-                flushParagraph()
-                var code: [String] = []
-                index += 1
-                while index < lines.count, !lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-                    code.append(lines[index])
-                    index += 1
+    override func mouseDragged(with event: NSEvent) {
+        lastDragEvent = event
+        if autoscroll(with: event) {
+            if dragScrollTimer == nil {
+                let timer = Timer(timeInterval: 0.06, repeats: true) { [weak self] _ in
+                    self?.continueDragScrolling()
                 }
-                index += 1
-                blocks.append(.code(code.joined(separator: "\n")))
-                continue
+                RunLoop.main.add(timer, forMode: .common)
+                dragScrollTimer = timer
             }
-
-            if trimmed.isEmpty {
-                flushParagraph()
-                index += 1
-                continue
-            }
-
-            if trimmed == "---" || trimmed == "***" || trimmed == "___" {
-                flushParagraph()
-                blocks.append(.rule)
-                index += 1
-                continue
-            }
-
-            if let heading = headingLevel(trimmed) {
-                flushParagraph()
-                blocks.append(.heading(heading.0, heading.1))
-                index += 1
-                continue
-            }
-
-            if trimmed.hasPrefix(">") {
-                flushParagraph()
-                var quoted: [String] = []
-                while index < lines.count {
-                    let candidate = lines[index].trimmingCharacters(in: .whitespaces)
-                    guard candidate.hasPrefix(">") else { break }
-                    quoted.append(String(candidate.dropFirst()).trimmingCharacters(in: .whitespaces))
-                    index += 1
-                }
-                blocks.append(.quote(quoted.joined(separator: "\n")))
-                continue
-            }
-
-            if let item = bulletContent(trimmed) {
-                flushParagraph()
-                blocks.append(.bullet(item))
-                index += 1
-                continue
-            }
-
-            if let item = orderedContent(trimmed) {
-                flushParagraph()
-                blocks.append(.ordered(item.0, item.1))
-                index += 1
-                continue
-            }
-
-            if trimmed.contains("|"), index + 1 < lines.count, isTableDelimiter(lines[index + 1]) {
-                flushParagraph()
-                var rows: [String] = []
-                while index < lines.count, lines[index].contains("|") {
-                    let row = lines[index].trimmingCharacters(in: .whitespaces)
-                    if !isTableDelimiter(lines[index]) { rows.append(row) }
-                    index += 1
-                }
-                blocks.append(.table(rows.joined(separator: "\n")))
-                continue
-            }
-
-            paragraph.append(line)
-            index += 1
+        } else {
+            dragScrollTimer?.invalidate()
+            dragScrollTimer = nil
         }
-        flushParagraph()
-        return blocks.isEmpty ? [.paragraph(text)] : blocks
+        super.mouseDragged(with: event)
     }
 
-    private static func headingLevel(_ line: String) -> (Int, String)? {
-        let hashes = line.prefix { $0 == "#" }
-        guard (1...6).contains(hashes.count) else { return nil }
-        let rest = line.dropFirst(hashes.count)
-        guard rest.hasPrefix(" ") else { return nil }
-        return (hashes.count, rest.trimmingCharacters(in: .whitespaces))
+    override func mouseUp(with event: NSEvent) {
+        stopDragScrolling()
+        super.mouseUp(with: event)
     }
 
-    private static func bulletContent(_ line: String) -> String? {
-        for marker in ["- ", "* ", "+ "] where line.hasPrefix(marker) {
-            return String(line.dropFirst(marker.count))
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { stopDragScrolling() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    private func continueDragScrolling() {
+        guard let event = lastDragEvent, autoscroll(with: event) else {
+            stopDragScrolling()
+            return
         }
-        return nil
+        super.mouseDragged(with: event)
     }
 
-    private static func orderedContent(_ line: String) -> (String, String)? {
-        var digits = ""
-        var rest = Substring(line)
-        while let first = rest.first, first.isNumber {
-            digits.append(first)
-            rest = rest.dropFirst()
+    private func stopDragScrolling() {
+        dragScrollTimer?.invalidate()
+        dragScrollTimer = nil
+        lastDragEvent = nil
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX), let outer = superview?.enclosingScrollView {
+            outer.scrollWheel(with: event)
+        } else {
+            super.scrollWheel(with: event)
         }
-        guard !digits.isEmpty, rest.hasPrefix(". ") || rest.hasPrefix(") ") else { return nil }
-        return (digits + String(rest.prefix(1)), String(rest.dropFirst(2)))
-    }
-
-    private static func isTableDelimiter(_ line: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard trimmed.contains("-") else { return false }
-        return trimmed.allSatisfy { $0 == "|" || $0 == "-" || $0 == ":" || $0 == " " }
     }
 }

@@ -32,7 +32,7 @@ sudo xattr -r -d com.apple.quarantine /Applications/MausBot.app
 - **Multiple computers:** Pair using a link or an address and pairing code, switch computers, set local names, inspect connection addresses, reconnect, and forget devices.
 - **Conversations and rooms:** Browse Bots and rooms, create rooms and conversations, switch tasks (conversations), load older messages, mark messages as read, and search globally. Selecting a bot opens its most recently active conversation.
 - **Sidebar organization:** Create sections, choose their Bots, and move Bots between sections.
-- **Chat:** Stream replies, choose a work location for each bot conversation, render Markdown, upload and preview images, save attachments, export conversations, stop replies, and delete queued messages. Rooms currently support text messages only.
+- **Chat:** Stream replies, choose a work location for each bot conversation, render Markdown with code highlighting, math, and Mermaid, upload and preview images, save attachments, export conversations, stop replies, and delete queued messages. Rooms currently support text messages only.
 - **Activity messages:** Consecutive tool activities are grouped into expandable sections with summaries, execution status, and failure counts.
 - **Approvals and questions:** Allow, deny, or always allow requests, and answer using options or free text.
 - **Bot management:** Create and rename Bots, edit standing instructions, pin or hide them, configure notifications and models, and set custom Emoji icons locally.
@@ -200,6 +200,7 @@ the remote device must still be done in OpenMausBot on that computer.
 ```bash
 APP=build/Build/Products/Debug/MausBot.app/Contents/MacOS/MausBot
 "$APP" --selfcheck protocol          # parsing, routing, cards, activity groups, Emoji, frame merging, Keychain
+"$APP" --selfcheck markdown-ui       # Markdown preview, copy selection, scrolling, and sanitization
 "$APP" --selfcheck e2e               # official E2E test vectors
 ```
 

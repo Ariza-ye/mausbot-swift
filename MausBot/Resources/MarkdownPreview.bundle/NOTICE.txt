@@ -1,0 +1,11 @@
+Markdown preview dependencies
+
+The preview uses swift-cmark-gfm 1.0.2 and its bundled cmark-gfm parser.
+DOMPurify 3.4.17 is used to sanitize rendered HTML.
+
+The following unmodified preview assets are from MiaoYan commit
+278685238ebf4afcb12a9cc01eb39e62bf5a54fe:
+  highlight.js 11.5.1, KaTeX, Mermaid, and KaTeX fonts.
+MiaoYan's math protection algorithm is adapted in MarkdownMath.swift.
+
+The corresponding license texts are in the licenses directory.
