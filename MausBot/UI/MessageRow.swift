@@ -138,10 +138,11 @@ struct MessageRow: View {
         let files = message.attachments.filter { !$0.isImage }
         return VStack(alignment: .leading, spacing: 6) {
             if !images.isEmpty {
-                HStack(spacing: 8) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 120, maximum: 180), spacing: 8)], alignment: .leading, spacing: 8) {
                     ForEach(images) { attachment in
                         RemoteImage(path: attachment.path, contentMode: .fit)
-                            .frame(width: 180, height: 130)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 130)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -150,6 +151,7 @@ struct MessageRow: View {
                             .onTapGesture { onPreview(attachment) }
                     }
                 }
+                .frame(maxWidth: CGFloat(images.count) * 188 - 8, alignment: .leading)
             }
             ForEach(files) { attachment in
                 Button {
