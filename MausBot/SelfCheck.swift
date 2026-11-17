@@ -215,6 +215,17 @@ enum SelfCheck {
             check("activity groups preserve time separators", separated.count == 2 && separated.last?.showTime == true)
             check("empty transcripts produce no groups", TranscriptEntry.group([]).isEmpty)
 
+            var emptyReply = Message(id: "empty", role: "bot", text: " \n", createdAt: activityDate)
+            check("empty bot replies are hidden", emptyReply.isEmptyBotMessage)
+            emptyReply.tool = activity.tool
+            check("empty tool messages stay visible", !emptyReply.isEmptyBotMessage)
+            emptyReply.tool = nil
+            emptyReply.card = card
+            check("empty card messages stay visible", !emptyReply.isEmptyBotMessage)
+            emptyReply.card = nil
+            emptyReply.role = "user"
+            check("empty user messages stay visible", !emptyReply.isEmptyBotMessage)
+
             var digest = Message(id: "digest", role: "bot", text: " \n[digest] · no tool activity observed in this turn · reply: hello", createdAt: activityDate)
             check("bot digest summaries are hidden", digest.isDigest)
             digest.role = "user"

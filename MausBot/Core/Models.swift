@@ -384,6 +384,10 @@ struct Message: Identifiable, Equatable, Sendable {
 
     var isUser: Bool { role == "user" }
     var isBot: Bool { role == "bot" }
+    var isEmptyBotMessage: Bool {
+        isBot && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && card == nil && tool == nil && attachments.isEmpty && !pending && !failed
+    }
     var isDigest: Bool {
         isBot && card == nil && tool == nil && attachments.isEmpty
             && (kind == "digest" || text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[digest]"))

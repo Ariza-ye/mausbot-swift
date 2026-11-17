@@ -90,6 +90,26 @@ final class AppStore: ObservableObject {
 
     private let store = ComputerStore.shared
     private var client: ApiClient?
+
+    func privateDesktopScreenshot(api: ApiClient, botId: String, threadId: String) async throws -> NSImage {
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "threadId", value: threadId)]
+        let query = components.percentEncodedQuery ?? ""
+        let result = try await api.post("/api/bots/\(botId)/local-computer/screenshot?\(query)")
+        guard let image = result.str("image"),
+              let comma = image.firstIndex(of: ","),
+              image.hasPrefix("data:image/png;base64,") || image.hasPrefix("data:image/jpeg;base64,"),
+              let data = Data(base64Encoded: String(image[image.index(after: comma)...])),
+              let decoded = NSImage(data: data) else {
+            throw APIError(status: 0, message: localized("无法读取私有桌面画面"), body: nil)
+        }
+        return decoded
+    }
+
+    func desktopClient() throws -> ApiClient {
+        guard let client else { throw APIError(status: 0, message: localized("未连接电脑"), body: nil) }
+        return client
+    }
     private var connectionTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var lastCursorWrite = Date.distantPast

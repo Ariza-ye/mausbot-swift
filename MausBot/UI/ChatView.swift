@@ -32,7 +32,7 @@ struct ChatView: View {
         store.threads[chat.threadId] ?? ThreadState()
     }
 
-    private var messages: [Message] { thread.messages.filter { !$0.isDigest } }
+    private var messages: [Message] { thread.messages.filter { !$0.isDigest && !$0.isEmptyBotMessage } }
 
     private var busy: Bool {
         guard let bot else { return false }
@@ -51,6 +51,16 @@ struct ChatView: View {
                     modelMenu(bot)
                         .padding(.leading, 8)
                     tasksMenu(bot)
+                    Button {
+                        do {
+                            PrivateDesktopWindow.open(api: try store.desktopClient(), store: store, botId: bot.id, threadId: chat.threadId)
+                        } catch {
+                            store.lastError = error.localizedDescription
+                        }
+                    } label: {
+                        Image(systemName: "desktopcomputer")
+                    }
+                    .help("查看私有桌面")
                 }
                 moreMenu
                     .padding(.trailing, 8)
@@ -622,6 +632,119 @@ struct ChatView: View {
         draft = ""
         attachment = nil
         scrollRequest += 1
+    }
+}
+
+@MainActor
+private final class PrivateDesktopWindow: NSObject, NSWindowDelegate {
+    private static var openWindows: [String: PrivateDesktopWindow] = [:]
+    private let key: String
+    private let desktop: PrivateDesktop
+    private let store: AppStore
+    private let window: NSWindow
+
+    static func open(api: ApiClient, store: AppStore, botId: String, threadId: String) {
+        let key = "\(store.computer?.id ?? ""):\(botId):\(threadId)"
+        if let existing = openWindows[key] {
+            existing.window.makeKeyAndOrderFront(nil)
+            return
+        }
+        let controller = PrivateDesktopWindow(key: key, api: api, store: store, botId: botId, threadId: threadId)
+        openWindows[key] = controller
+        controller.window.center()
+        controller.window.makeKeyAndOrderFront(nil)
+    }
+
+    private init(key: String, api: ApiClient, store: AppStore, botId: String, threadId: String) {
+        self.key = key
+        self.store = store
+        let desktop = PrivateDesktop(api: api, botId: botId, threadId: threadId)
+        self.desktop = desktop
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              backing: .buffered, defer: false)
+        self.window = window
+        super.init()
+        window.title = localized("私有桌面")
+        window.minSize = NSSize(width: 640, height: 440)
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.contentViewController = NSHostingController(rootView:
+            PrivateDesktopPreview(botId: botId, threadId: threadId, api: api, desktop: desktop, close: { [weak window] in
+                window?.performClose(nil)
+            }).environmentObject(store))
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        Self.openWindows.removeValue(forKey: key)
+        let desktop = desktop
+        let store = store
+        let wasControlling = desktop.controlling
+        Task {
+            await desktop.stop()
+            if wasControlling, let error = desktop.error { store.lastError = error }
+        }
+    }
+}
+
+private struct PrivateDesktopPreview: View {
+    let botId: String
+    let threadId: String
+    let api: ApiClient
+    @EnvironmentObject private var store: AppStore
+    @State private var image: NSImage?
+    @State private var error: String?
+    @ObservedObject var desktop: PrivateDesktop
+    let close: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("私有桌面").font(.headline)
+                Spacer()
+                Button("关闭", action: close)
+            }
+            if desktop.connected {
+                PrivateDesktopSurface(desktop: desktop)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let image {
+                Image(nsImage: image).resizable().scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error {
+                Text(error).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            if let message = desktop.error { Text(message).foregroundStyle(.red) }
+            Button(desktop.controlling ? "归还控制" : "接管控制") {
+                Task { if desktop.controlling { await desktop.stop() } else { await desktop.start() } }
+            }
+            .disabled(desktop.working || desktop.releasing)
+        }
+        .padding()
+        .frame(minWidth: 640, minHeight: 440)
+        .task(id: "\(botId):\(threadId)") {
+            while !Task.isCancelled {
+                if desktop.controlling || desktop.working || desktop.releasing {
+                    try? await Task.sleep(for: .seconds(1))
+                    continue
+                }
+                do {
+                    let next = try await store.privateDesktopScreenshot(api: api, botId: botId, threadId: threadId)
+                    guard !Task.isCancelled else { return }
+                    image = next
+                    error = nil
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    image = nil
+                    self.error = error.localizedDescription
+                }
+                try? await Task.sleep(for: .seconds(4))
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            Task { await desktop.stop() }
+        }
     }
 }
 
