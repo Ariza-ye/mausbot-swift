@@ -148,7 +148,11 @@ struct MessageRow: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .stroke(Theme.hairline, lineWidth: 1)
                             )
+                            .contentShape(Rectangle())
                             .onTapGesture { onPreview(attachment) }
+                            .contextMenu {
+                                AttachmentImageButtons(attachment: attachment) { store.lastError = $0 }
+                            }
                     }
                 }
                 .frame(maxWidth: CGFloat(images.count) * 188 - 8, alignment: .leading)

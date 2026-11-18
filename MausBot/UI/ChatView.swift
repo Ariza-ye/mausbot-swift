@@ -9,7 +9,6 @@ struct ChatView: View {
     @State private var attachment: Attachment?
     @State private var uploading = false
     @State private var showImporter = false
-    @State private var preview: Attachment?
     @State private var atBottom = true
     @State private var userScrolling = false
     @State private var scrollRequest = 0
@@ -65,9 +64,6 @@ struct ChatView: View {
                 moreMenu
                     .padding(.trailing, 8)
             }
-        }
-        .sheet(item: $preview) { attachment in
-            AttachmentPreview(attachment: attachment)
         }
     }
 
@@ -234,7 +230,7 @@ struct ChatView: View {
                             threadId: chat.threadId,
                             isRoom: group != nil,
                             bot: bot,
-                            onPreview: { preview = $0 }
+                            onPreview: { AttachmentPreviewWindow.open(attachment: $0, store: store) }
                         )
                     }
 
@@ -760,27 +756,5 @@ private struct ComposerSurface: ViewModifier {
                 .overlay(shape.stroke(Theme.hairline, lineWidth: 1))
                 .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
         }
-    }
-}
-
-struct AttachmentPreview: View {
-    let attachment: Attachment
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(attachment.name ?? localized("图片"))
-                    .appFont(size: 13, weight: .medium)
-                Spacer()
-                Button("关闭") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(12)
-            RemoteImage(path: attachment.path, contentMode: .fit)
-                .frame(minWidth: 420, minHeight: 320)
-                .padding(12)
-        }
-        .frame(minWidth: 460, minHeight: 380)
     }
 }

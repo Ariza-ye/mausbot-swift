@@ -47,6 +47,11 @@
 "中继服务" = "Relay Servers";
 "取消" = "Cancel";
 "保存" = "Save";
+"复制图片" = "Copy Image";
+"图片另存为…" = "Save Image As…";
+"无法复制图片" = "Could not copy the image";
+"图片操作失败" = "Image Action Failed";
+"好" = "OK";
 "保存失败：%@" = "Could not save: %@";
 "局域网直连" = "Local network";
 "Tailscale 直连" = "Tailscale";
