@@ -114,9 +114,7 @@ final class AttachmentPreviewWindow: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.contentViewController = NSHostingController(rootView:
-            AttachmentPreview(attachment: attachment, close: { [weak window] in
-                window?.performClose(nil)
-            })
+            AttachmentPreview(attachment: attachment)
             .environmentObject(store)
             .environment(\.locale, AppLanguage.current.locale))
     }
@@ -128,7 +126,6 @@ final class AttachmentPreviewWindow: NSObject, NSWindowDelegate {
 
 struct AttachmentPreview: View {
     let attachment: Attachment
-    let close: () -> Void
     @State private var error: String?
 
     var body: some View {
@@ -139,13 +136,14 @@ struct AttachmentPreview: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 12)
-                AttachmentImageButtons(attachment: attachment) { error = $0 }
-                Button("关闭", action: close)
-                    .keyboardShortcut(.cancelAction)
             }
             .padding(12)
             RemoteImage(path: attachment.path, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .contextMenu {
+                    AttachmentImageButtons(attachment: attachment) { error = $0 }
+                }
                 .padding(12)
         }
         .frame(minWidth: 460, minHeight: 320)
